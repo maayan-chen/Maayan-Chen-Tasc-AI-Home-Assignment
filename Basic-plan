@@ -1,0 +1,120 @@
+ Customer Handoff RAG Tool — Implementation Plan
+
+ Context
+
+ This is for the TASC AI Team home assignment: build a simple internal tool that streamlines a TASC consultant's work, usable by non-technical people. The chosen idea: help a new team quickly get up to speed on an existing customer when they pick up a new project with that customer.
+
+ Two steps, both surfaced in one Streamlit app, no CLI required for end users:
+ 1. Ingestion tab — a consultant picks a project folder, types the customer's name, and clicks "Run Ingestion Agent." The agent collects everything about the customer from that folder — project files, meeting summaries, public web info — and pushes it into a shared RAG store, tagged with that customer's identity.
+ 2. Query tab — a new team opens the same app to ask questions about the customer, scoped to just that customer's data.
+
+ Constraints: 2 days total, must be very simple, and the user needs to fully understand and be able to explain every part in a job interview — so no unnecessary complexity or "magic."
+
+ The user will supply a real mock customer folder (project files + meeting summaries) rather than us fabricating a fictional company — so there is no demo-data-authoring step in this plan. The pipeline just needs to work against whatever folder is pointed at it.
+
+ File intake model — UI-driven, not CLI. The ingestion tab has two inputs: a folder picker (path to wherever the project's files already live — any local/shared path, no copying into this repo) and a plain text field for the customer's name. Both inputs persist their last value (written to a small local JSON file, e.g. .last_ingest.json, read back on app start) so re-running for the same customer/folder is a single click. Customer identity is always explicit, typed by the user — never inferred from folder or project names, since a project folder is typically named after the project, not the customer, and guessing would risk silently mixing up customer scoping (the one thing this tool depends on for trust). One folder → one typed customer name → one context_tag.
+
+ When it runs: the natural default to describe in a demo is "at project handoff / end of engagement," but nothing about the design requires that. Because ingestion never resets the collection (pre_delete_collection=False), the same button can be clicked anytime — after a milestone, after a big meeting, mid-project, pointed at a different folder for the same customer — and it only ever adds to that customer's knowledge base. Worth stating explicitly in the interview: "run once at handoff" is the simple story, "can run incrementally, from multiple folders, throughout the project" is true for free, with zero extra engineering.
+
+ Three reference repos already explored, to build on:
+ - References/Nivs-RAG/ — minimal FastAPI + LangChain + Postgres/pgvector RAG service (base to build from).
+ - References/AI-Agent/ — minimal LangChain tool-calling agent skeleton (create_tool_calling_agent + AgentExecutor + Tool(...) pattern).
+ - References/project-template/ — lightweight CLAUDE.md/STATE.md scaffolding conventions (adopt selectively, it's about how we work, not shipped product).                       
+ Project Setup
+
+ New project at /Users/maayanchen/Code/Work/Tasc_homework/customer-handoff-rag/, built by copying in the relevant files from References/Nivs-RAG/ (not editing References in place — that folder stays untouched as reference material). Fresh git init there for a clean commit history for submission.
+
+ customer-handoff-rag/
+ ├── .env                       # from Nivs-RAG .env, same keys (OPENAI_API_KEY, PGVECTOR_*)
+ ├── .gitignore
+ ├── docker-compose.yml         # from Nivs-RAG, unchanged
+ ├── Dockerfile                 # from Nivs-RAG, unchanged
+ ├── init.sql                   # from Nivs-RAG, unchanged
+ ├── requirements.txt           # merged deps + streamlit + duckduckgo-search
+ ├── vector_store.py            # from Nivs-RAG, UNCHANGED
+ ├── create_database.py         # from Nivs-RAG, functions reused by ingestion agent
+ ├── models.py                  # from Nivs-RAG, unchanged
+ ├── api.py                     # from Nivs-RAG, unchanged (kept as optional API artifact)
+ ├── query_data.py              # from Nivs-RAG, unchanged (CLI reference)
+ ├── ingest_agent.py            # NEW — ingestion orchestration logic (called from the app, and optionally as a CLI for testing)
+ ├── ingest_tools.py            # NEW — file-reading + web-search helper functions/tools
+ ├── app.py                     # NEW — single Streamlit app, two tabs: Ingest / Ask
+ ├── .last_ingest.json          # NEW, gitignored — remembers last folder path + customer name
+ ├── CLAUDE.md                  # trimmed from project-template
+ └── STATE.md                   # trimmed from project-template
+
+ Customer project folders are NOT copied into this repo — the ingestion tab's folder picker points at wherever the real project files already live (any local/shared path). The repo only needs to know the customer name (→ context_tag, typed by the user) and a path (picked by the user).
+
+ Architecture
+
+ Step 1 — Ingestion Tab (app.py "Ingest" tab, logic in ingest_agent.py)
+
+ Trigger: two inputs in the UI, then a button.
+
+ - Folder path — st.text_input("Project folder path"), prefilled from .last_ingest.json if present. (Streamlit has no native OS folder-browser dialog for a server-side path, so a text input with the remembered last value is the pragmatic choice — worth stating plainly in the interview rather than over-building a custom file-browser widget.)
+ - Customer name — st.text_input("Customer name"), prefilled the same way. Always typed by the user, never inferred from the folder/project name — a project folder is normally named after the project, not the customer, and guessing would risk silently mis-scoping data between customers, which is the one thing this tool depends on for trust.
+ - "Run Ingestion Agent" button — on click: save both inputs to .last_ingest.json, then call ingest_agent.run_ingestion(customer_name, folder_path) synchronously (with a st.spinner), then show a success summary (files read, chunks saved) or an error.
+ - The customer name is slugified into the context_tag used for retrieval scoping (e.g. "Acme Retail" → acme-retail). This is the single mechanism that isolates one customer's data from another's.
+ - Deterministic file reading: walks the given folder (project files + meeting summary files, both just treated as files — no special-casing between the two categories), reads each .txt/.md/.pdf, reusing extract_content_from_bytes() from vector_store.py so there's exactly one place in the codebase that knows how to parse a file. Plain Python, not an agent-invoked tool — deterministic and easy to debug.
+ - Agent-driven web search: the LLM agent's job is narrow — given the customer name and a skim of the local files, formulate a good web search query and run it (DuckDuckGoSearchRun, same as References/AI-Agent/tools.py), optionally producing a short synthesized "customer briefing" paragraph. This is the one place create_tool_calling_agent + AgentExecutor genuinely earns its keep — everything else is plain code.
+ - Indexing: all content (each local file + the web search result/synthesis) becomes a Document(page_content=..., metadata={"source": ..., "context_tag": ...}), chunked via create_database.py's split_text() (reuse chunk_size=300/overlap=100 as-is), saved via save_to_pgvector(chunks, pre_delete_collection=False) — never reset the collection, since multiple customers share one pgvector collection distinguished only by context_tag.
+ - Direct Python function calls, not HTTP to /index. The ingestion script imports and calls create_database.py/vector_store.py functions directly in-process. Justification: agent and RAG store are the same codebase; an HTTP hop to your own FastAPI app adds serialization + a "is the server up?" failure mode for no decoupling benefit. api.py's /index endpoint still exists and works if ever needed as a shared service boundary — just unused here by choice.
+ - No LLM-based relevance filtering at ingestion. Everything found gets indexed; relevance is computed once, at query time, via vector similarity + the existing min_relevance threshold. Avoids a second "judgment" layer that would be hard to explain and easy to get wrong.                                                                                                                                                                         
+ Step 2 — Ask Tab (app.py "Ask" tab)                                                       
+ - Customer selector: a dropdown populated from distinct context_tag values already present in Postgres (SELECT DISTINCT cmetadata->>'context_tag' FROM langchain_pg_embedding) — this is the one place the app reads back what's already been ingested, so the list is always accurate and there's no second place customer names are typed/could drift from what's actually indexed.
+ - st.chat_input/st.chat_message loop for the question.
+ - On each question: take the selected context_tag directly (no re-typing/re-slugifying needed, it's already stored), call the same retrieval logic as api.py's /query handler by importing vector_store.create_vector_store() directly (same direct-call reasoning as ingestion — one codebase, no network hop needed).
+ - Render the LLM's answer as a chat bubble; render sources (list of filenames from QueryResponse/the raw metadata) underneath as a "Sources" caption — this is what lets a non-technical consultant trust and verify the answer.
+ - Streamlit chosen over a custom React/HTML frontend: zero frontend build step, streamlit run app.py, looks like a real chat app via st.chat_message, and every line is plain Python that's trivial to walk through in an interview. Two tabs (st.tabs(["Ingest", "Ask"])) keep it a single app a consultant just opens — no separate ingestion tool to install or run.
+
+ File-by-File Plan
+
+ Reused as-is: vector_store.py, create_database.py (import functions, don't run its CLI main()), models.py, docker-compose.yml, Dockerfile, init.sql.
+
+ Reused, no changes needed: api.py, query_data.py — kept around as optional artifacts (API boundary / CLI reference) but not required for the ingestion or chat flows.
+
+ New files:
+ - ingest_agent.py — run_ingestion(customer_name: str, folder_path: str) -> dict (files read, chunks saved), callable from the Streamlit app; keep a thin if __name__ == "__main__": argparse wrapper too so it's independently testable from a terminal during Day 1 before the UI exists. Orchestrates: read files (deterministic) → agent formulates + runs web search / synthesis → chunk + tag + save (direct calls into create_database.py).
+ - ingest_tools.py — read_local_files(folder_path) -> list[dict], web_search_company(customer_name, context) -> str, kept separate so ingest_agent.py stays readable.
+ - app.py — single Streamlit entrypoint, st.tabs(["Ingest", "Ask"]); Ingest tab per above, Ask tab is the customer-selector + chat loop.
+ - .last_ingest.json — tiny local file ({"folder_path": ..., "customer_name": ...}), read on app start to prefill the ingestion tab's inputs, written on each successful "Run Ingestion Agent" click. Gitignored (it's local UI state, not project data).
+ - CLAUDE.md, STATE.md — trimmed per project-template conventions, for tracking our own 2-day progress (not shipped product value, keep to ~15 min to write).
+
+ New dependencies: streamlit, duckduckgo-search (via langchain_community.tools.DuckDuckGoSearchRun), langchain-anthropic or continue with langchain-openai for the agent LLM (reuse whichever key is already configured).
+
+ Sequencing
+
+ Day 1 — plumbing + ingestion logic, ends with real customer data in the DB
+ 1. Scaffold customer-handoff-rag/, copy Nivs-RAG base files, docker compose up, sanity-check /index+/query still work against Nivs-RAG's own sample data before changing anything.
+ 2. Get the path to a real (or user-supplied mock) customer project folder to test against.
+ 3. Write read_local_files() (pure I/O, reuse extract_content_from_bytes), test standalone against that folder.
+ 4. Write web_search_company(), test standalone with a real query derived from the folder's actual customer name.
+ 5. Write ingest_agent.run_ingestion() wiring both + the chunk/tag/save step via create_database.py functions; test it via the thin CLI wrapper first (fastest feedback loop, no UI needed yet).
+ 6. Run it end to end against the real folder; verify rows land in langchain_pg_embedding with the right context_tag (quick psql check).
+ 7. Checkpoint: query via query_data.py or curl /query with context_tag filter returns sane, sourced answers.
+
+ Day 2 — single Streamlit app (Ingest + Ask tabs), polish, docs
+ 1. Write app.py: Ingest tab wired to run_ingestion() with the folder-path/customer-name inputs and .last_ingest.json persistence; Ask tab with the context_tag dropdown + chat loop.
+ 2. If a second real customer folder becomes available, ingest it too via the UI, to demonstrate context_tag scoping actually isolates customers (same question, two customers, two correctly-scoped answers) — nice to have, not required.
+ 3. Polish: empty-state message when nothing matches, loading spinner during ingestion/query, basic error handling if OpenAI/Postgres is down or the folder path doesn't exist.
+ 4. Write submission README: setup (docker compose up, .env keys, how to run streamlit run app.py) + a short "how it works" section.
+ 5. Fresh docker compose up --build, re-run ingestion from the UI from scratch, walk through the ask flow once more before submitting.
+
+ Interview Talking Points (design decisions to be ready to explain)
+
+ 1. context_tag as the sole customer-scoping mechanism — one indexed JSONB metadata field, filtered on at query time. Chosen because customer isolation only needs to be logical, not physical (no per-customer tables/collections).
+ 2. Direct Python calls instead of HTTP hops within the same process, both for ingestion→RAG and chat→RAG. HTTP buys language/process decoupling; not needed when it's all one codebase — api.py remains available if the RAG store ever needs to be a separately-owned service.
+ 3. No LLM-driven relevance filtering at ingestion — ingest everything, let vector similarity + min_relevance do relevance filtering once, at query time. Keeps ingestion deterministic and debuggable.
+ 4. Agent scope is deliberately narrow — the LLM/tool-calling agent only formulates the web search query and optionally synthesizes a summary; file reading and the write path are plain deterministic Python. Avoids unexplainable "magic" while still legitimately using create_tool_calling_agent/AgentExecutor.
+ 5. Meeting summaries are just files in a folder, no calendar/notes-tool integration; email is out of scope entirely — building real OAuth integrations would burn the whole 2-day budget on plumbing unrelated to the core RAG/agent skill being demonstrated.
+ 6. Streamlit for the UI, single app with two tabs — satisfies the assignment's "non-technical person can just open and use it" requirement with a fraction of the build time of a custom frontend; one app means no separate ingestion tool to install or run.
+ 7. Customer name is always explicit user input, never inferred from folder/project names. A folder path is chosen per-run and typically named after the project, not the customer; guessing customer identity from it risks silently mis-scoping data (leaking one customer's info into another's answers). Both the folder path and the typed name persist across runs so this costs the user nothing after the first time.
+
+ Verification
+
+ - docker compose up --build starts Postgres+pgvector and the app cleanly.
+ - CLI wrapper (python ingest_agent.py --customer "<name>" --folder /path) completes without error and reports chunks saved — used for fast iteration on Day 1 before the UI exists.
+ - streamlit run app.py opens; Ingest tab: folder path + customer name inputs are prefilled from .last_ingest.json after the first run; clicking "Run Ingestion Agent" against a real folder succeeds and updates the file.
+ - psql (or a quick Python check) confirms rows in langchain_pg_embedding carry the correct context_tag.
+ - Ask tab: customer dropdown lists the ingested customer (read live from distinct context_tags in Postgres); a real question about that customer returns a grounded answer with correct source filenames.
+ - If a second customer is ingested: same question against the two customers returns different, correctly-scoped answers, confirming context_tag isolation.

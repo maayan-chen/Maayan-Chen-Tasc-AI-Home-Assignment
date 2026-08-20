@@ -1,0 +1,18 @@
+# Read-only reference material, not part of this repo
+References/
+
+# Secrets
+.env
+
+# Local UI state — not project data
+.last_ingest.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# OS
+.DS_Store
