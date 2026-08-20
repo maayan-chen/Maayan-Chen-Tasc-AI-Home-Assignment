@@ -44,9 +44,10 @@ interview.
   service boundary in this project — `api.py` was removed as an unauthenticated
   endpoint that let `context_tag` be omitted or spoofed, breaking the one
   scoping mechanism this tool depends on for trust.
-- Keep the LLM agent's scope narrow: it only formulates/runs the web search
-  and optionally synthesizes a short briefing. File reading and the DB write
-  path are plain deterministic Python.
+- No LLM/agent involved in ingestion at all — it's deterministic file reading
+  + chunking + save, plain Python top to bottom. The web-search/tool-calling
+  agent step was cut (see `docs/ARCHITECTURE.md`); don't reintroduce it
+  without a concrete reason a fixed script can't do the job.
 
 ## Execution Discipline
 - **Pause before chaining multi-step or destructive build steps** — confirm
@@ -78,7 +79,6 @@ interview.
 | System-critical lessons | `docs/LESSONS.md` | Gotchas, not a changelog |
 | Active plans | `.agents/plans/*.md` | Phased implementation plans |
 | RAG base to build from | `../References/Nivs-RAG/` | FastAPI + LangChain + Postgres/pgvector, reused files copied in, not edited in place |
-| Agent pattern to follow | `../References/AI-Agent/` | `create_tool_calling_agent` + `AgentExecutor` + `Tool(...)` skeleton |
 
 ## Off-Limits
 - `../References/` — read-only reference material. Never edit files there;

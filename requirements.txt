@@ -14,9 +14,6 @@ pytest==8.3.5
 # App (Streamlit UI)
 streamlit==1.37.1
 
-# Ingestion agent (web search)
-duckduckgo-search==6.2.6
-
 # File parsing (.docx / .xlsx / .pptx)
 python-docx==1.1.2
 openpyxl==3.1.5

@@ -84,8 +84,6 @@ for developer testing only).
   since an image has no embedded text layer to trust in the first place.
   Covers dropped-in screenshots (slides, chat logs) in the customer folder —
   see Section 6
-- ✅ Agent-driven web search (formulate query from customer name + file
-  skim, run `DuckDuckGoSearchRun`, optionally synthesize a short briefing)
 - ✅ Chunking (reuse `chunk_size=300` / `chunk_overlap=100`) and indexing
   into a shared pgvector collection, tagged with `context_tag`
 - ✅ Ingestion is additive/incremental — never resets the collection
@@ -109,9 +107,9 @@ for developer testing only).
   `.docx`/`.xlsx`/`.pptx` support, a PDF OCR fallback, and direct OCR for
   `.png`/`.jpg`/`.jpeg` files. `api.py` and `models.py` were dropped — see
   Section 6
-- ✅ New `ingest_agent.py` with a thin CLI wrapper (`argparse`) for
-  standalone testing before the UI exists
-- ✅ New `ingest_tools.py` (file reading + web search helpers)
+- ✅ New `ingest.py` with a thin CLI wrapper (`argparse`) for standalone
+  testing before the UI exists — plain orchestration, no agent/LLM step
+- ✅ New `ingest_tools.py` (file reading helpers)
 - ✅ New `app.py` single Streamlit entrypoint with two tabs
 - ✅ Direct in-process Python function calls between app/agent and RAG store
   (no HTTP service boundary in this project)
@@ -125,6 +123,13 @@ for developer testing only).
 ### Out of Scope
 **Core Functionality**
 - ❌ Automated/LLM-based relevance filtering at ingestion time
+- ❌ Any LLM/agent step in ingestion — no web search, no
+  `create_tool_calling_agent`/`AgentExecutor`. Considered and cut: an
+  agent formulating a web search query from the customer name reduced to
+  one fixed, non-judgmental tool call — functionally identical to a
+  consultant Googling the company, not worth the added complexity,
+  dependency, and flakiness risk (see `docs/ARCHITECTURE.md`). Ingestion is
+  100% local-file processing.
 - ❌ Physical per-customer data isolation (separate tables/collections)
 - ❌ Calendar or notes-tool integrations (meeting summaries are just files
   a consultant drops in the folder)
@@ -144,7 +149,8 @@ for developer testing only).
 - ❌ Deleting or editing already-ingested customer data via the UI
 
 **Integration**
-- ❌ Any integration beyond local filesystem reads and public web search
+- ❌ Any integration beyond local filesystem reads (no web search — see
+  Section 4 Core Functionality above)
 
 **Deployment**
 - ❌ Production hosting/cloud deployment — local Docker Compose only, for
@@ -156,7 +162,7 @@ for developer testing only).
    folder and type the customer's name, so that everything I know about
    this engagement is captured before I hand it off.
    *Example: Point at `~/projects/acme-retail-2026/`, type "Acme Retail",
-   click "Run Ingestion Agent" — get a summary: "14 files read, 87 chunks
+   click "Run Ingestion" — get a summary: "14 files read, 87 chunks
    saved."*
 
 2. **As a new team member**, I want to be required to pick a customer before
@@ -198,9 +204,9 @@ for developer testing only).
    — get two different, correctly-scoped answers, never cross-contaminated.*
 
 8. **(Technical) As the developer**, I want a CLI wrapper for the ingestion
-   logic, so that I can test `read_local_files()` → agent → indexing
-   end-to-end before the Streamlit UI exists.
-   *Example: `python ingest_agent.py --customer "Acme Retail" --folder
+   logic, so that I can test `read_local_files()` → indexing end-to-end
+   before the Streamlit UI exists.
+   *Example: `python ingest.py --customer "Acme Retail" --folder
    /path` completes and reports chunks saved, runnable from a terminal on
    Day 1.*
 
@@ -225,12 +231,12 @@ customer-handoff-rag/
 ├── docker-compose.yml      # Postgres+pgvector + app service (unchanged from Nivs-RAG)
 ├── Dockerfile               # REUSED, EXTENDED — adds tesseract-ocr + tesseract-ocr-heb system packages
 ├── init.sql                 # unchanged from Nivs-RAG
-├── requirements.txt         # Nivs-RAG deps + streamlit + duckduckgo-search + python-docx + openpyxl + python-pptx + pytesseract + Pillow
+├── requirements.txt         # Nivs-RAG deps + streamlit + python-docx + openpyxl + python-pptx + pytesseract + Pillow
 ├── vector_store.py          # REUSED, EXTENDED — pgvector connection; extract_content_from_bytes() gains .docx/.xlsx/.pptx parsing + PDF OCR fallback + image OCR
 ├── create_database.py       # REUSED — split_text(), save_to_pgvector(), set_context_tag()
 ├── query_data.py             # REUSED UNCHANGED — CLI reference for querying
-├── ingest_agent.py           # NEW — run_ingestion(customer_name, folder_path) orchestration + CLI wrapper
-├── ingest_tools.py           # NEW — read_local_files(), web_search_company()
+├── ingest.py                  # NEW — run_ingestion(customer_name, folder_path) orchestration + CLI wrapper, no agent
+├── ingest_tools.py           # NEW — read_local_files()
 ├── app.py                    # NEW — Streamlit entrypoint, st.tabs(["Ingest", "Ask"])
 ├── .last_ingest.json          # NEW, gitignored — remembers last folder path + customer name
 ├── CLAUDE.md                  # Agent operating instructions (trimmed from project-template)
@@ -243,16 +249,17 @@ customer-handoff-rag/
   isolation mechanism — no per-customer tables or pgvector collections.
 - **Direct function calls, not HTTP:** ingestion and chat both import and
   call `vector_store.py`/`create_database.py` functions directly, since
-  agent and RAG store share one codebase. Nivs-RAG's `api.py` (and the
+  ingestion and chat share one codebase. Nivs-RAG's `api.py` (and the
   `models.py` schemas it depended on) was removed rather than kept as an
   unused escape hatch — it let `context_tag` be omitted or spoofed with no
   auth, and was the container's actual `CMD`, not dead code. See
   `docs/ARCHITECTURE.md`.
-- **Deterministic ingestion, narrow agent scope:** file reading and the
-  pgvector write path are plain Python, always executed the same way for
-  the same input. The LLM/tool-calling agent (`create_tool_calling_agent` +
-  `AgentExecutor`) is used only to formulate and run a web search query and
-  optionally synthesize a short customer briefing.
+- **Deterministic ingestion, no agent:** file reading and the pgvector write
+  path are plain Python, always executed the same way for the same input. No
+  LLM or `create_tool_calling_agent`/`AgentExecutor` step exists in
+  ingestion — a web-search agent step was planned, then cut before
+  implementation once it reduced to one fixed, non-judgmental tool call. See
+  `docs/ARCHITECTURE.md`.
 - **No ingestion-time relevance filtering:** everything found (every local
   file, the web search result) is indexed unfiltered. Relevance is computed
   once, at query time, via vector similarity + `min_relevance` threshold —
@@ -304,12 +311,12 @@ customer-handoff-rag/
 ### 7.1 Ingest Tab
 - Two `st.text_input` fields: project folder path, customer name — both
   prefilled from `.last_ingest.json` if present.
-- "Run Ingestion Agent" button. On click:
+- "Run Ingestion" button. On click:
   1. Save both inputs to `.last_ingest.json`.
   2. Slugify the customer name into `context_tag` (e.g. "Acme Retail" →
      `acme-retail`).
-  3. Call `ingest_agent.run_ingestion(customer_name, folder_path)`
-     synchronously, wrapped in `st.spinner`.
+  3. Call `ingest.run_ingestion(customer_name, folder_path)` synchronously,
+     wrapped in `st.spinner`.
   4. Deterministically walk the folder, read each
      `.txt`/`.md`/`.pdf`/`.docx`/`.xlsx`/`.pptx`/`.png`/`.jpg`/`.jpeg` via an
      extended `extract_content_from_bytes()` (reused from `vector_store.py`,
@@ -320,15 +327,13 @@ customer-handoff-rag/
      the page is re-read via OCR instead. Image files are always routed
      straight to OCR (see Section 6). Other unsupported file types are
      skipped, not errored.
-  5. Agent formulates a web search query from the customer name + a skim of
-     local files, runs `DuckDuckGoSearchRun`, optionally synthesizes a short
-     briefing paragraph.
-  6. Wrap each local file and the web search result as a `Document`
-     (`page_content`, `metadata={"source": ..., "context_tag": ...}`).
-  7. Chunk via `create_database.py`'s `split_text()` (chunk_size=300,
+  5. Wrap each local file as a `Document` (`page_content`,
+     `metadata={"source": ..., "context_tag": ...}`). No web search step —
+     cut, see `docs/ARCHITECTURE.md`.
+  6. Chunk via `create_database.py`'s `split_text()` (chunk_size=300,
      chunk_overlap=100), tag via `set_context_tag()`, save via
      `save_to_pgvector(chunks, pre_delete_collection=False)`.
-  8. Show a success summary (files read, chunks saved) or a clear error
+  7. Show a success summary (files read, chunks saved) or a clear error
      message.
 
 ### 7.2 Ask Tab
@@ -352,7 +357,7 @@ customer-handoff-rag/
   `min_relevance`).
 
 ### 7.3 Ingestion CLI Wrapper (developer-only)
-- `ingest_agent.py` includes a thin `if __name__ == "__main__":` block with
+- `ingest.py` includes a thin `if __name__ == "__main__":` block with
   `argparse` (`--customer`, `--folder`), so ingestion logic is testable from
   a terminal on Day 1 before the UI exists. Not part of the end-user
   product surface.
@@ -362,11 +367,9 @@ customer-handoff-rag/
 | Layer | Technology | Notes |
 |---|---|---|
 | UI | Streamlit | Single app, `st.tabs(["Ingest", "Ask"])`, zero frontend build step |
-| Agent framework | LangChain (`create_tool_calling_agent`, `AgentExecutor`) | Scoped narrowly to web search formulation/synthesis |
-| LLM | OpenAI (`langchain-openai`, `ChatOpenAI`) | Single provider throughout — chat, agent, and embeddings all OpenAI |
+| LLM | OpenAI (`langchain-openai`, `ChatOpenAI`) | Single provider throughout — chat and embeddings both OpenAI. No agent/LLM step in ingestion — see `docs/ARCHITECTURE.md` |
 | Embeddings | `OpenAIEmbeddings` | Reused from `vector_store.py`, unchanged |
 | Vector store | Postgres + pgvector (`langchain-postgres` `PGVector`) | Shared collection across all customers |
-| Web search | `duckduckgo-search` via `langchain_community.tools.DuckDuckGoSearchRun` | New dependency; matches `References/AI-Agent/tools.py` pattern |
 | File parsing | `pypdf`, plain UTF-8 decode, `python-docx`, `openpyxl`, `python-pptx` | Via extended `extract_content_from_bytes()` |
 | OCR | `pytesseract` + `tesseract-ocr`/`tesseract-ocr-heb` (system), `PyMuPDF` (page rasterization), `Pillow` | PDF fallback triggered only when `pypdf`'s text extraction looks unreliable; always-on for `.png`/`.jpg`/`.jpeg` files — see Section 6 |
 | DB driver | `psycopg` | Reused connection helpers in `vector_store.py` |
@@ -374,8 +377,7 @@ customer-handoff-rag/
 | Config | `python-dotenv`, `.env` | `OPENAI_API_KEY`, `PGVECTOR_CONNECTION`/`PGVECTOR_COLLECTION`, `POSTGRES_*` |
 
 **New dependencies to add to `requirements.txt`:** `streamlit`,
-`duckduckgo-search`, `python-docx`, `openpyxl`, `python-pptx`, `pytesseract`,
-`Pillow`, `PyMuPDF`.
+`python-docx`, `openpyxl`, `python-pptx`, `pytesseract`, `Pillow`, `PyMuPDF`.
 
 **New system dependency (`Dockerfile`):** `tesseract-ocr` and
 `tesseract-ocr-heb` (the Hebrew language pack) via `apt-get`. Confirmed
@@ -421,7 +423,7 @@ untouched and the stack simpler to explain.
 
 ## 10. API Specification
 
-No HTTP API. `app.py`/`ingest_agent.py` call `vector_store.py`/
+No HTTP API. `app.py`/`ingest.py` call `vector_store.py`/
 `create_database.py` functions directly, in-process. Nivs-RAG's `api.py`
 (and the `models.py` Pydantic schemas it depended on) were removed rather
 than kept as an unused service boundary — it was unauthenticated and let
@@ -503,10 +505,8 @@ through the real `extract_content_from_bytes()` path to confirm parity.
 **Deliverables:**
 - ✅ `ingest_tools.py`: `read_local_files()` tested standalone against the
   real customer folder
-- ✅ `ingest_tools.py`: `web_search_company()` tested standalone with a real
-  query
-- ✅ `ingest_agent.py`: `run_ingestion()` wiring both + chunk/tag/save,
-  tested via CLI wrapper (no UI yet)
+- ✅ `ingest.py`: `run_ingestion()` wiring file reading + chunk/tag/save
+  (no agent/web search step), tested via CLI wrapper (no UI yet)
 **Validation:** `psql` check confirms rows in `langchain_pg_embedding` with
 the right `context_tag`; a `query_data.py`/curl query with `context_tag`
 filter returns a sane, sourced answer.
@@ -576,12 +576,11 @@ complete one ingest + one ask cycle.
    (scaffolding + RAG base sanity check) doesn't require it, so that work
    can proceed in parallel while the folder is sourced.
 
-4. **Risk:** Web search agent step (`DuckDuckGoSearchRun`) is flaky or rate
-   limited, causing ingestion to fail entirely.
-   **Mitigation:** Local file ingestion and web search are logically
-   separable steps; if this becomes a real issue, the web search step can
-   degrade gracefully (log a warning, continue indexing local files) —
-   worth deciding explicitly if it comes up, not silently swallowed.
+4. **Risk (retired):** Web search agent step (`DuckDuckGoSearchRun`) being
+   flaky/rate-limited and failing ingestion. No longer applicable — the
+   web-search/agent step was cut entirely before implementation (see
+   `docs/ARCHITECTURE.md`); ingestion is local-file-only and has no external
+   network dependency to be flaky.
 
 5. **Risk:** No automated tests means a regression in `create_database.py`
    reuse or the retrieval path could go unnoticed until manual QA.
@@ -614,7 +613,7 @@ complete one ingest + one ask cycle.
 
 **Key dependencies (reference implementations, read-only):**
 - `References/Nivs-RAG/` — FastAPI + LangChain + Postgres/pgvector RAG base
-- `References/AI-Agent/` — `create_tool_calling_agent` + `AgentExecutor` +
-  `Tool(...)` skeleton
+  (`References/AI-Agent/`'s tool-calling agent pattern was evaluated and not
+  used — see `docs/ARCHITECTURE.md`)
 - `References/project-template/` — CLAUDE.md/STATE.md scaffolding
   conventions

@@ -15,8 +15,8 @@ customers, so this one field is the entire trust boundary. → `vector_store.py`
 ## Direct in-process Python calls instead of HTTP hops within the same codebase
 Both ingestion→RAG and chat→RAG import and call `vector_store.py` /
 `create_database.py` functions directly, rather than exposing an HTTP API.
-HTTP buys language/process decoupling, which isn't needed when agent and RAG
-store are the same codebase — an extra network hop adds serialization and an
+HTTP buys language/process decoupling, which isn't needed when ingestion/chat
+and the RAG store are the same codebase — an extra network hop adds serialization and an
 "is the server up?" failure mode for no benefit. Cost: if the RAG store ever
 needs to be a separately-owned service, this coupling has to be undone.
 
@@ -31,25 +31,40 @@ pass once it had zero remaining importers — a leftover file with no runtime
 path is worth removing on sight, same as any other dead code. There is no
 HTTP surface in this project; add one deliberately, with auth and mandatory
 `context_tag`, if a real need for a separately-owned RAG service ever
-arises. → `ingest_agent.py`, `app.py`, `Dockerfile`, `docker-compose.yml`
+arises. → `ingest.py`, `app.py`, `Dockerfile`, `docker-compose.yml`
 
 ## No LLM-driven relevance filtering at ingestion
-Everything found (local files + web search result) gets indexed unfiltered;
-relevance is computed once, at query time, via vector similarity +
-`min_relevance`. Rejected: an LLM judgment pass at ingestion to decide what's
-"relevant enough" to index — this adds an unexplainable judgment layer and a
-second place things can silently go wrong. Cost: some low-signal content ends
-up in the store, relying entirely on retrieval-time filtering to keep answers
-grounded. → `ingest_agent.py`
+Everything found in the local folder gets indexed unfiltered; relevance is
+computed once, at query time, via vector similarity + `min_relevance`.
+Rejected: an LLM judgment pass at ingestion to decide what's "relevant
+enough" to index — this adds an unexplainable judgment layer and a second
+place things can silently go wrong. Cost: some low-signal content ends up in
+the store, relying entirely on retrieval-time filtering to keep answers
+grounded. → `ingest.py`
 
-## Agent scope is deliberately narrow
-The LLM/tool-calling agent (`create_tool_calling_agent` + `AgentExecutor`)
-only formulates a web search query from the customer name/local file skim and
-optionally synthesizes a short briefing paragraph. File reading and the
-write-to-pgvector path are plain deterministic Python, not agent tool calls.
-Rejected: giving the agent tools for file reading and indexing too — harder
-to debug, harder to narrate step-by-step in an interview. Cost: less
-"impressive" as an agent demo, but every step is inspectable. → `ingest_agent.py`, `ingest_tools.py`
+## No LLM/agent step in ingestion — web search was cut entirely
+Ingestion is 100% deterministic: read local files, chunk, tag, save. There is
+no `create_tool_calling_agent`/`AgentExecutor` anywhere in this project.
+Originally planned: an agent that formulates a web search query from the
+customer name, runs `DuckDuckGoSearchRun`, and optionally synthesizes a short
+briefing. Cut before implementation once it was clear the "agent" reduced to
+one fixed query pattern (`f"{customer_name} company"`) driving a single tool
+call — functionally identical to a consultant Googling the company
+themselves, with no judgment the agent was actually adding. That fails this
+project's central test (`CLAUDE.md`: "every architectural choice needs its
+own justification, or cut it") — an `AgentExecutor` wrapping one
+deterministic call is a layer that can't be narrated as anything other than
+"we added an LLM call for no reason." Also removes a live flakiness/rate-limit
+risk (`duckduckgo-search`) and a dependency, for zero functional loss — the
+local project files (specs, notes, meeting summaries) are the actual source
+of truth for a handoff, not a generic web scrape a chatbot could produce
+anyway. Rejected alternative: keep a trivial *non-agentic* web search (one
+plain `DuckDuckGoSearchRun.run(customer_name)` call, no LLM) — even that was
+cut since it adds a moving part for content low-value enough that it doesn't
+change what a consultant can ask the tool. Revisit only if there's a concrete
+task an agent does that a script can't (e.g. skimming local files first to
+target searches at actual content gaps, not just the customer name) — until
+then, adding it back means re-justifying it from scratch. → `ingest_tools.py`
 
 ## Streamlit, single app with two tabs
 Chosen over a custom React/HTML frontend: zero frontend build step,
