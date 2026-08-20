@@ -38,8 +38,10 @@ interview.
 - No LLM-based relevance filtering at ingestion time — ingest everything;
   relevance is computed once, at query time, via vector similarity.
 - Prefer direct in-process Python function calls over HTTP hops within this
-  same codebase (ingestion → RAG store, chat → RAG store). `api.py` remains
-  available as an optional service boundary but isn't used by the app.
+  same codebase (ingestion → RAG store, chat → RAG store). There is no HTTP
+  service boundary in this project — `api.py` was removed as an unauthenticated
+  endpoint that let `context_tag` be omitted or spoofed, breaking the one
+  scoping mechanism this tool depends on for trust.
 - Keep the LLM agent's scope narrow: it only formulates/runs the web search
   and optionally synthesizes a short briefing. File reading and the DB write
   path are plain deterministic Python.

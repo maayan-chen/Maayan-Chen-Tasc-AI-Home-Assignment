@@ -29,8 +29,6 @@ services:
     environment:
       POSTGRES_HOST: postgres
       PGVECTOR_CONNECTION: postgresql+psycopg://raguser:ragpass@postgres:5432/ragdb
-    ports:
-      - "8000:8000"
     volumes:
       - ./:/app
     restart: unless-stopped

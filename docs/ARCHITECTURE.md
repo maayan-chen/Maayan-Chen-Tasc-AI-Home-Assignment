@@ -14,13 +14,21 @@ customers, so this one field is the entire trust boundary. → `vector_store.py`
 
 ## Direct in-process Python calls instead of HTTP hops within the same codebase
 Both ingestion→RAG and chat→RAG import and call `vector_store.py` /
-`create_database.py` functions directly, rather than making HTTP requests to
-`api.py`. HTTP buys language/process decoupling, which isn't needed when
-agent and RAG store are the same codebase — an extra network hop adds
-serialization and an "is the server up?" failure mode for no benefit. Cost:
-if the RAG store ever needs to be a separately-owned service, this coupling
-has to be undone. `api.py`'s `/index` endpoint is kept working as that escape
-hatch, just unused by the app. → `ingest_agent.py`, `app.py`
+`create_database.py` functions directly, rather than exposing an HTTP API.
+HTTP buys language/process decoupling, which isn't needed when agent and RAG
+store are the same codebase — an extra network hop adds serialization and an
+"is the server up?" failure mode for no benefit. Cost: if the RAG store ever
+needs to be a separately-owned service, this coupling has to be undone.
+
+Nivs-RAG's `api.py` was removed rather than kept as an unused "escape hatch":
+it was unauthenticated and let `context_tag` be omitted or spoofed on both
+`/index` and `/query`, meaning any caller could read or write any customer's
+data. Since it was also the container's actual `CMD` (port 8000 exposed), it
+wasn't dead code — it was a live, unscoped read/write path sitting on top of
+the one field this tool depends on for trust. There is no HTTP surface in
+this project; add one deliberately, with auth and mandatory `context_tag`, if
+a real need for a separately-owned RAG service ever arises.
+→ `ingest_agent.py`, `app.py`, `Dockerfile`, `docker-compose.yml`
 
 ## No LLM-driven relevance filtering at ingestion
 Everything found (local files + web search result) gets indexed unfiltered;
