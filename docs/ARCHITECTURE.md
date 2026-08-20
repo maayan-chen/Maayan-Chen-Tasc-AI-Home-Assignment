@@ -25,10 +25,13 @@ it was unauthenticated and let `context_tag` be omitted or spoofed on both
 `/index` and `/query`, meaning any caller could read or write any customer's
 data. Since it was also the container's actual `CMD` (port 8000 exposed), it
 wasn't dead code — it was a live, unscoped read/write path sitting on top of
-the one field this tool depends on for trust. There is no HTTP surface in
-this project; add one deliberately, with auth and mandatory `context_tag`, if
-a real need for a separately-owned RAG service ever arises.
-→ `ingest_agent.py`, `app.py`, `Dockerfile`, `docker-compose.yml`
+the one field this tool depends on for trust. `models.py` (the Pydantic
+request/response schemas `api.py` alone consumed) was deleted in the same
+pass once it had zero remaining importers — a leftover file with no runtime
+path is worth removing on sight, same as any other dead code. There is no
+HTTP surface in this project; add one deliberately, with auth and mandatory
+`context_tag`, if a real need for a separately-owned RAG service ever
+arises. → `ingest_agent.py`, `app.py`, `Dockerfile`, `docker-compose.yml`
 
 ## No LLM-driven relevance filtering at ingestion
 Everything found (local files + web search result) gets indexed unfiltered;

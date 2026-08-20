@@ -27,8 +27,10 @@ interview.
 
 ## Code Standards
 - Reuse `References/Nivs-RAG/` files as-is wherever possible (`vector_store.py`,
-  `create_database.py`, `models.py`, `docker-compose.yml`, `Dockerfile`,
-  `init.sql`) — don't refactor working reference code without a reason.
+  `create_database.py`, `docker-compose.yml`, `Dockerfile`, `init.sql`) —
+  don't refactor working reference code without a reason. `api.py` and
+  `models.py` were dropped (see `docs/ARCHITECTURE.md`); there is no HTTP
+  service boundary in this project.
 - `context_tag` is the *only* mechanism that scopes data to a customer. Never
   add a second scoping mechanism (separate tables/collections) — logical
   isolation via one metadata field is the deliberate design.

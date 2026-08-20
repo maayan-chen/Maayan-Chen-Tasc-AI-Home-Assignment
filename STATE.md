@@ -31,7 +31,7 @@ returns a sane, sourced answer.
 | Component | Status | Notes |
 |-----------|--------|-------|
 | Project scaffolding | ✅ Live | `CLAUDE.md`, `STATE.md`, `docs/`, `.claude/`, `.agents/` in place |
-| RAG base (vector_store.py, create_database.py, models.py, docker-compose.yml, Dockerfile, init.sql) | ✅ Live | Copied in, verified end-to-end (indexing + scoped retrieval + isolation) |
+| RAG base (vector_store.py, create_database.py, docker-compose.yml, Dockerfile, init.sql) | ✅ Live | Copied in, verified end-to-end (indexing + scoped retrieval + isolation); `.docx`/`.xlsx`/`.pptx`/OCR parsing extended in |
 | `api.py` (optional HTTP boundary) | ❌ Removed | Unauthenticated, let `context_tag` be spoofed/omitted — see `docs/ARCHITECTURE.md` |
 | `ingest_agent.py` / `ingest_tools.py` | ⏸ Deferred | Not started |
 | `app.py` (Streamlit, Ingest + Ask tabs) | ⏸ Deferred | Not started |

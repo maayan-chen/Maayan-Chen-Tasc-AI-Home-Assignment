@@ -102,18 +102,19 @@ for developer testing only).
   (`.last_ingest.json`) and prefilled on next launch
 
 **Technical**
-- ✅ Reuse `create_database.py`, `models.py`, `docker-compose.yml`,
-  `init.sql` from `References/Nivs-RAG/` unchanged; `Dockerfile` reused with
-  Tesseract + Hebrew language pack added as a system dependency;
-  `vector_store.py` reused with its `extract_content_from_bytes()` extended
-  for `.docx`/`.xlsx`/`.pptx` support, a PDF OCR fallback, and direct OCR
-  for `.png`/`.jpg`/`.jpeg` files
+- ✅ Reuse `create_database.py`, `docker-compose.yml`, `init.sql` from
+  `References/Nivs-RAG/` unchanged; `Dockerfile` reused with Tesseract +
+  Hebrew language pack added as a system dependency; `vector_store.py`
+  reused with its `extract_content_from_bytes()` extended for
+  `.docx`/`.xlsx`/`.pptx` support, a PDF OCR fallback, and direct OCR for
+  `.png`/`.jpg`/`.jpeg` files. `api.py` and `models.py` were dropped — see
+  Section 6
 - ✅ New `ingest_agent.py` with a thin CLI wrapper (`argparse`) for
   standalone testing before the UI exists
 - ✅ New `ingest_tools.py` (file reading + web search helpers)
 - ✅ New `app.py` single Streamlit entrypoint with two tabs
 - ✅ Direct in-process Python function calls between app/agent and RAG store
-  (no HTTP hop to `api.py`)
+  (no HTTP service boundary in this project)
 - ✅ Basic error handling: folder path doesn't exist, OpenAI/Postgres down,
   no matching results for a query
 
@@ -136,8 +137,9 @@ for developer testing only).
 **Technical**
 - ❌ Automated test suite (pytest) — manual verification only, documented
   as a deliberate scope gap given the 2-day budget
-- ❌ HTTP-based service boundary between ingestion/chat and the RAG store
-  (`api.py`'s `/index` endpoint stays functional but unused)
+- ❌ HTTP-based service boundary between ingestion/chat and the RAG store —
+  `api.py` was removed entirely (see Section 6) rather than kept as an
+  unused escape hatch
 - ❌ Multi-user auth/access control — this is a trusted-internal-users tool
 - ❌ Deleting or editing already-ingested customer data via the UI
 
@@ -226,8 +228,6 @@ customer-handoff-rag/
 ├── requirements.txt         # Nivs-RAG deps + streamlit + duckduckgo-search + python-docx + openpyxl + python-pptx + pytesseract + Pillow
 ├── vector_store.py          # REUSED, EXTENDED — pgvector connection; extract_content_from_bytes() gains .docx/.xlsx/.pptx parsing + PDF OCR fallback + image OCR
 ├── create_database.py       # REUSED — split_text(), save_to_pgvector(), set_context_tag()
-├── models.py                 # REUSED UNCHANGED — Pydantic request/response models
-├── api.py                    # REUSED UNCHANGED — optional FastAPI service boundary, unused by app.py
 ├── query_data.py             # REUSED UNCHANGED — CLI reference for querying
 ├── ingest_agent.py           # NEW — run_ingestion(customer_name, folder_path) orchestration + CLI wrapper
 ├── ingest_tools.py           # NEW — read_local_files(), web_search_company()
@@ -243,9 +243,11 @@ customer-handoff-rag/
   isolation mechanism — no per-customer tables or pgvector collections.
 - **Direct function calls, not HTTP:** ingestion and chat both import and
   call `vector_store.py`/`create_database.py` functions directly, since
-  agent and RAG store share one codebase. `api.py`'s `/index` endpoint
-  remains available as an unused escape hatch if the RAG store is ever
-  split into its own service.
+  agent and RAG store share one codebase. Nivs-RAG's `api.py` (and the
+  `models.py` schemas it depended on) was removed rather than kept as an
+  unused escape hatch — it let `context_tag` be omitted or spoofed with no
+  auth, and was the container's actual `CMD`, not dead code. See
+  `docs/ARCHITECTURE.md`.
 - **Deterministic ingestion, narrow agent scope:** file reading and the
   pgvector write path are plain Python, always executed the same way for
   the same input. The LLM/tool-calling agent (`create_tool_calling_agent` +
@@ -342,8 +344,8 @@ customer-handoff-rag/
 - `st.chat_input`/`st.chat_message` loop, scoped to the selected customer.
 - On each question: use the selected `context_tag` (already stored, no
   re-typing/re-slugifying) to filter retrieval via
-  `vector_store.create_vector_store()`, mirroring `api.py`'s `/query`
-  handler logic but called in-process.
+  `vector_store.create_vector_store()` and a `context_tag`-filtered
+  `similarity_search_with_relevance_scores()` call, in-process.
 - Render the LLM's answer as a chat bubble; render source filenames
   underneath as a "Sources" caption.
 - Empty-state message when no matching results are found (below
@@ -368,7 +370,6 @@ customer-handoff-rag/
 | File parsing | `pypdf`, plain UTF-8 decode, `python-docx`, `openpyxl`, `python-pptx` | Via extended `extract_content_from_bytes()` |
 | OCR | `pytesseract` + `tesseract-ocr`/`tesseract-ocr-heb` (system), `PyMuPDF` (page rasterization), `Pillow` | PDF fallback triggered only when `pypdf`'s text extraction looks unreliable; always-on for `.png`/`.jpg`/`.jpeg` files — see Section 6 |
 | DB driver | `psycopg` | Reused connection helpers in `vector_store.py` |
-| Optional API boundary | FastAPI (`api.py`) | Kept working, unused by `app.py` |
 | Containerization | Docker Compose | `pgvector/pgvector:pg16` + app service; `Dockerfile` extended with Tesseract system packages |
 | Config | `python-dotenv`, `.env` | `OPENAI_API_KEY`, `PGVECTOR_CONNECTION`/`PGVECTOR_COLLECTION`, `POSTGRES_*` |
 
@@ -420,17 +421,15 @@ untouched and the stack simpler to explain.
 
 ## 10. API Specification
 
-No new HTTP API is introduced. `api.py` (from `References/Nivs-RAG/`) is
-reused unchanged and remains available as an optional service boundary, but
-`app.py` does not call it — it imports the same underlying functions
-directly.
-
-For reference, the existing (unused-by-app) endpoints:
-
-| Endpoint | Method | Purpose |
-|---|---|---|
-| `/index` | POST | Upload + chunk + embed a single file, optionally tagged with `context_tag` |
-| `/query` | POST | `{query_text, k, min_relevance, context_tag}` → grounded answer + sources |
+No HTTP API. `app.py`/`ingest_agent.py` call `vector_store.py`/
+`create_database.py` functions directly, in-process. Nivs-RAG's `api.py`
+(and the `models.py` Pydantic schemas it depended on) were removed rather
+than kept as an unused service boundary — it was unauthenticated and let
+`context_tag` be omitted or spoofed on both its `/index` and `/query`
+endpoints, and it was the container's actual `CMD` (port 8000 exposed), not
+dead code. See `docs/ARCHITECTURE.md` for the full rationale. If a real need
+for a separately-owned RAG service ever arises, a new HTTP surface should be
+added deliberately, with auth and a mandatory `context_tag`.
 
 ## 11. Success Criteria
 
@@ -474,7 +473,8 @@ For reference, the existing (unused-by-app) endpoints:
 - ✅ `git init` at `customer-handoff-rag/`, feature branch created
 - ✅ `vector_store.py`, `create_database.py`, `models.py`, `api.py`,
   `query_data.py`, `docker-compose.yml`, `Dockerfile`, `init.sql` copied
-  in unchanged from `References/Nivs-RAG/`
+  in unchanged from `References/Nivs-RAG/` (`models.py`/`api.py` later
+  removed — see Section 6)
 - ✅ `docker compose up --build` runs cleanly
 **Validation:** `/index` and `/query` still work against Nivs-RAG's own
 sample data (`data/alice_in_wonderland.md`) before any new code is written.
@@ -547,8 +547,10 @@ complete one ingest + one ask cycle.
 - Calendar/notes-tool/email integrations as additional ingestion sources
 - Ability to delete or re-scope previously ingested data from the UI
 - Multi-user auth if the tool moves beyond a trusted internal audience
-- Splitting the RAG store into a standalone service behind `api.py` if
-  it ever needs to be shared with systems outside this codebase
+- Splitting the RAG store into a standalone, properly-authenticated HTTP
+  service if it ever needs to be shared with systems outside this
+  codebase (see `docs/ARCHITECTURE.md` for why the original `api.py` was
+  removed rather than kept as that boundary)
 
 ## 14. Risks & Mitigations
 
