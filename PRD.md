@@ -79,6 +79,11 @@ for developer testing only).
   (confirmed real-world case: Hebrew PDFs with non-standard font encoding
   that `pypdf` silently misreads as garbage characters rather than failing
   outright) — see Section 6 for the detection + fallback approach
+- ✅ Image ingestion (`.png`/`.jpg`/`.jpeg`) via the same `pytesseract` OCR
+  path used for the PDF fallback — always run, no "is this needed" check,
+  since an image has no embedded text layer to trust in the first place.
+  Covers dropped-in screenshots (slides, chat logs) in the customer folder —
+  see Section 6
 - ✅ Agent-driven web search (formulate query from customer name + file
   skim, run `DuckDuckGoSearchRun`, optionally synthesize a short briefing)
 - ✅ Chunking (reuse `chunk_size=300` / `chunk_overlap=100`) and indexing
@@ -101,7 +106,8 @@ for developer testing only).
   `init.sql` from `References/Nivs-RAG/` unchanged; `Dockerfile` reused with
   Tesseract + Hebrew language pack added as a system dependency;
   `vector_store.py` reused with its `extract_content_from_bytes()` extended
-  for `.docx`/`.xlsx` support and a PDF OCR fallback
+  for `.docx`/`.xlsx` support, a PDF OCR fallback, and direct OCR for
+  `.png`/`.jpg`/`.jpeg` files
 - ✅ New `ingest_agent.py` with a thin CLI wrapper (`argparse`) for
   standalone testing before the UI exists
 - ✅ New `ingest_tools.py` (file reading + web search helpers)
@@ -126,8 +132,6 @@ for developer testing only).
   server-side folder picker)
 - ❌ Fabricated/synthetic demo customer data — a real (or user-supplied
   mock) customer folder is required to test against
-- ❌ Image ingestion (screenshots, diagrams, photos) — deferred; see
-  Future Considerations
 
 **Technical**
 - ❌ Automated test suite (pytest) — manual verification only, documented
@@ -220,7 +224,7 @@ customer-handoff-rag/
 ├── Dockerfile               # REUSED, EXTENDED — adds tesseract-ocr + tesseract-ocr-heb system packages
 ├── init.sql                 # unchanged from Nivs-RAG
 ├── requirements.txt         # Nivs-RAG deps + streamlit + duckduckgo-search + python-docx + openpyxl + pytesseract + Pillow
-├── vector_store.py          # REUSED, EXTENDED — pgvector connection; extract_content_from_bytes() gains .docx/.xlsx parsing + PDF OCR fallback
+├── vector_store.py          # REUSED, EXTENDED — pgvector connection; extract_content_from_bytes() gains .docx/.xlsx parsing + PDF OCR fallback + image OCR
 ├── create_database.py       # REUSED — split_text(), save_to_pgvector(), set_context_tag()
 ├── models.py                 # REUSED UNCHANGED — Pydantic request/response models
 ├── api.py                    # REUSED UNCHANGED — optional FastAPI service boundary, unused by app.py
@@ -276,6 +280,15 @@ customer-handoff-rag/
   misreads on ambiguous glyphs — so `heb`-only is the better default for
   documents that are Hebrew apart from embedded digits/dates (which OCR
   correctly regardless of language setting).
+- **Direct OCR for image files:** `.png`/`.jpg`/`.jpeg` files found in the
+  customer folder (e.g. a slide export or a chat-log screenshot) are always
+  routed straight to `pytesseract`, using the same call as the PDF OCR
+  fallback — no "should I OCR this" detection step, since an image file has
+  no embedded text layer to check in the first place, unlike a PDF. Same
+  deterministic, no-LLM-judgment principle as the rest of ingestion: OCR
+  either extracts legible text or it doesn't, and a low-yield/garbled OCR
+  result is just weaker source content, filtered out the same way any other
+  low-relevance chunk is — at query time, not ingestion time.
 
 ## 7. Features
 
@@ -289,14 +302,15 @@ customer-handoff-rag/
   3. Call `ingest_agent.run_ingestion(customer_name, folder_path)`
      synchronously, wrapped in `st.spinner`.
   4. Deterministically walk the folder, read each
-     `.txt`/`.md`/`.pdf`/`.docx`/`.xlsx` via an extended
-     `extract_content_from_bytes()` (reused from `vector_store.py`, adding
-     `python-docx` and `openpyxl` parsing branches alongside the existing
-     `pypdf`/UTF-8 paths) — no distinction made between project files and
-     meeting summaries. For PDFs, if `pypdf`'s extracted text looks
-     unreliable (see OCR fallback rule in Section 6), the page is re-read
-     via OCR instead. Unsupported file types (including images) are
-     skipped, not errored.
+     `.txt`/`.md`/`.pdf`/`.docx`/`.xlsx`/`.png`/`.jpg`/`.jpeg` via an
+     extended `extract_content_from_bytes()` (reused from `vector_store.py`,
+     adding `python-docx` and `openpyxl` parsing branches alongside the
+     existing `pypdf`/UTF-8 paths) — no distinction made between project
+     files and meeting summaries. For PDFs, if `pypdf`'s extracted text
+     looks unreliable (see OCR fallback rule in Section 6), the page is
+     re-read via OCR instead. Image files are always routed straight to
+     OCR (see Section 6). Other unsupported file types are skipped, not
+     errored.
   5. Agent formulates a web search query from the customer name + a skim of
      local files, runs `DuckDuckGoSearchRun`, optionally synthesizes a short
      briefing paragraph.
@@ -344,8 +358,8 @@ customer-handoff-rag/
 | Embeddings | `OpenAIEmbeddings` | Reused from `vector_store.py`, unchanged |
 | Vector store | Postgres + pgvector (`langchain-postgres` `PGVector`) | Shared collection across all customers |
 | Web search | `duckduckgo-search` via `langchain_community.tools.DuckDuckGoSearchRun` | New dependency; matches `References/AI-Agent/tools.py` pattern |
-| File parsing | `pypdf`, plain UTF-8 decode, `python-docx`, `openpyxl` | Via extended `extract_content_from_bytes()`; images not parsed |
-| OCR fallback | `pytesseract` + `tesseract-ocr`/`tesseract-ocr-heb` (system), `PyMuPDF` (page rasterization), `Pillow` | Only triggered when `pypdf`'s text extraction looks unreliable — see Section 6 |
+| File parsing | `pypdf`, plain UTF-8 decode, `python-docx`, `openpyxl` | Via extended `extract_content_from_bytes()` |
+| OCR | `pytesseract` + `tesseract-ocr`/`tesseract-ocr-heb` (system), `PyMuPDF` (page rasterization), `Pillow` | PDF fallback triggered only when `pypdf`'s text extraction looks unreliable; always-on for `.png`/`.jpg`/`.jpeg` files — see Section 6 |
 | DB driver | `psycopg` | Reused connection helpers in `vector_store.py` |
 | Optional API boundary | FastAPI (`api.py`) | Kept working, unused by `app.py` |
 | Containerization | Docker Compose | `pgvector/pgvector:pg16` + app service; `Dockerfile` extended with Tesseract system packages |
@@ -460,11 +474,13 @@ sample data (`data/alice_in_wonderland.md`) before any new code is written.
 
 ### Phase 1.5 — Extend file parsing (Day 1, before real ingestion testing)
 **Goal:** `extract_content_from_bytes()` handles every file type expected in
-real customer folders, including the Hebrew-PDF OCR fallback.
+real customer folders, including the Hebrew-PDF OCR fallback and image OCR.
 **Deliverables:**
 - ✅ `.docx` (`python-docx`) and `.xlsx` (`openpyxl`) parsing branches added
 - ✅ PDF OCR fallback added: detect unreliable `pypdf` extraction, rasterize
   via PyMuPDF, OCR via `pytesseract` (`lang="heb"`)
+- ✅ `.png`/`.jpg`/`.jpeg` branch added: load via Pillow, OCR directly via
+  the same `pytesseract` call as the PDF fallback, no detection step
 - ✅ `Dockerfile` updated with `tesseract-ocr` + `tesseract-ocr-heb` system
   packages; `requirements.txt` updated with new Python deps
 **Validation:** Already spiked standalone (outside the repo, via a local
@@ -514,10 +530,10 @@ complete one ingest + one ask cycle.
 *(Explicitly post-MVP — not part of this 2-day build.)*
 - Automated pytest coverage, especially for `context_tag` isolation
   specifically, since it's the entire trust boundary
-- Image ingestion (screenshots, diagrams) via OCR or vision-model
-  captioning — deferred because it introduces an ingestion-time LLM
-  judgment layer and added cost; worth revisiting if customer folders
-  turn out to contain meaningful image content
+- Vision-model captioning for images with little/no extractable text
+  (diagrams, photos, non-text screenshots) — OCR only recovers text that's
+  actually rendered in the image; deferred because it introduces an
+  ingestion-time LLM judgment layer and added cost, unlike plain OCR
 - OS-native folder picker or drag-and-drop file upload instead of a raw
   text path input
 - Calendar/notes-tool/email integrations as additional ingestion sources
@@ -537,8 +553,8 @@ complete one ingest + one ask cycle.
    of protection against accidentally querying the wrong customer.
 
 2. **Risk:** 2-day budget is tight; scope creep (e.g. building a real
-   folder-browser UI, adding calendar integrations, image ingestion) eats
-   time needed for the core ingest→index→ask loop.
+   folder-browser UI, adding calendar integrations, vision-model image
+   captioning) eats time needed for the core ingest→index→ask loop.
    **Mitigation:** Out-of-scope list above is explicit and was agreed up
    front; every deferred item has a one-sentence justification for why it's
    not in the MVP ("would burn the budget on plumbing unrelated to the core

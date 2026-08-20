@@ -2,7 +2,7 @@
 
 Pointers to decisions and their rationale — not a description of the code.
 Read the code for how; read this for why. These are also the interview
-talking points for this assignment (see `../Basic-plan`).
+talking points for this assignment (see `PRD.md`).
 
 ## `context_tag` is the sole customer-scoping mechanism
 One indexed JSONB metadata field on each chunk, filtered on at query time.
@@ -76,15 +76,31 @@ been written down in the folder or is publicly findable on the web. → `ingest_
 ---
 
 ## Gap: no automated tests
-This is a 2-day take-home assignment: verification is manual (see `../Basic-plan`
-Verification section — CLI wrapper run, `psql` check, UI walkthrough), not a
+This is a 2-day take-home assignment: verification is manual (see `PRD.md`
+§11 Success Criteria — CLI wrapper run, `psql` check, UI walkthrough), not a
 pytest suite.
 
 **This is a scope gap, not an oversight.** Deliberate call given the time
 budget; a real production version of this tool would need tests around
 `context_tag` scoping specifically, since that's the trust boundary.
 
-1. Ship as-is with manual verification steps documented in `../Basic-plan` — chosen, matches the assignment's actual time budget.
+1. Ship as-is with manual verification steps documented in `PRD.md` — chosen, matches the assignment's actual time budget.
 2. Add a minimal pytest for `context_tag` isolation only — costs an hour+ Day 2 doesn't have to spare.
 
-→ `../Basic-plan`
+→ `PRD.md`
+
+## Images are always OCR'd, no LLM pre-classification
+`.png`/`.jpg`/`.jpeg` files found in a customer folder are always routed
+through `pytesseract`, the same call used for the PDF OCR fallback — no
+vision-model step decides first whether an image "looks like text" (a
+slide/screenshot) versus a photo or diagram. Rejected: an LLM vision call to
+classify each image before deciding whether to OCR it. That would reintroduce
+the same ingestion-time LLM judgment layer already rejected for relevance
+filtering (see above), and it doesn't prevent a real failure mode — OCR on a
+non-text image just yields empty/garbled text, which is harmless and gets
+filtered out at query time by `min_relevance` like any other low-signal
+chunk, the same way a low-quality OCR'd PDF page is handled. A misclassified
+image (real slide marked "not text" and skipped) would be a worse, silent
+failure than always-OCR's worst case. Cost: OCR runs on some images that
+turn out to have no useful text — cheap and local, not worth avoiding.
+→ `vector_store.py`

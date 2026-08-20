@@ -27,6 +27,32 @@ Where a lesson is worth enforcing, pin it with a test and say so in the entry.
 Prose degrades; a red test does not.
 -->
 
-## {{Lesson stated as a claim}}
-{{What happened, why it was surprising, what the real signal was, and what to do
-instead.}} → `{{path}}`
+## `unstructured`'s markdown/HTML loader silently needs extra NLTK data not bundled with pip
+`DirectoryLoader(glob="*.md")` (used by `create_database.py`'s
+`load_documents()`) worked fine at container build/import time, then failed
+at first actual use with `LookupError: Resource 'punkt_tab' not found`. The
+error only surfaces when a real `.md`/`.html` file is partitioned — nothing
+in `requirements.txt` or the import graph signals this dependency exists.
+Fixing it one resource at a time is a trap: after downloading `punkt_tab`,
+the very next run failed again on a *different* missing resource
+(`averaged_perceptron_tagger_eng`), because `unstructured`'s sentence
+tokenizer and POS tagger are each looked up lazily on first use, not
+validated upfront. Don't chase these one at a time in the running container —
+download both in the `Dockerfile` (`python -m nltk.downloader punkt_tab
+averaged_perceptron_tagger_eng`) so it's part of the image and survives
+rebuilds; a container-only `nltk.download()` fix disappears on the next
+`docker compose up --build`. → `Dockerfile`
+
+## A single `save_to_pgvector()` call can exceed the OpenAI embeddings TPM limit
+Indexing `alice_in_wonderland.md` (170KB, 801 chunks) whole in one
+`PGVector.from_documents()` call failed with `RateLimitError: tokens per
+minute (TPM): Limit 40000, Requested 45575` — not an auth or quota problem
+(credits were confirmed present), and not obvious from the error alone that
+it's a *batch size* issue rather than an account-level block. `save_to_pgvector`
+→ `create_vector_store_from_documents` → `PGVector.from_documents` embeds
+every chunk's text in one request with no batching. A full customer folder
+could plausibly exceed this the same way a full book did. Workaround used
+for the sanity check: index a small text slice instead of the whole file.
+Real fix, not yet implemented: batch `save_to_pgvector` calls (e.g. embed in
+groups of chunks under the account's TPM limit) if real customer folders turn
+out to be large enough to trip this. → `vector_store.py`, `create_database.py`
