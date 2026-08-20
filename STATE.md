@@ -1,7 +1,7 @@
 <!-- This file must stay under 80 lines. If it grows, prune or move content to docs/. -->
 # Customer Handoff RAG Tool — Current State
-Last updated: 2026-08-20 (RAG base verified end-to-end; web-search/agent step
-cut from scope before implementation; ingestion code not yet written)
+Last updated: 2026-08-20 (Phase 2 ingestion shipped and merged to `main`;
+real Teva data indexed in Postgres; Phase 3 Streamlit UI not yet started)
 
 ## Project Summary
 A Streamlit app (Ingest tab + Ask tab) that helps a new TASC team get up to
@@ -27,11 +27,17 @@ cleaned from Postgres afterward. `extract_content_from_bytes()` extended for
 Real customer folder now available:
 `/Users/maayanchen/Code/Work/Teva_Org_Streamlining_Project` (mixed
 Hebrew/English `.docx`/`.xlsx`/`.pptx`/`.pdf`/`.png` files).
-**Goal:** Write `ingest_tools.py` (`read_local_files()`) and `ingest.py`
-(`run_ingestion()` orchestration + CLI wrapper) — Phase 2, no agent involved.
-**Done when:** The real Teva customer folder ingests via the CLI wrapper and
-lands in Postgres with the correct `context_tag`; a `context_tag`-filtered
-query returns a sane, sourced answer.
+**Done (Phase 2):** `read_local_files.py` (`read_local_files()`) and
+`ingest.py` (`run_ingestion()` + CLI wrapper) written, reviewed, and merged to
+`main`. Real Teva customer folder ingested via the CLI wrapper: 11 files →
+167 chunks, correct `context_tag`, zero untagged rows, `query_data.py`
+returns a grounded, sourced answer. These 334 rows (two ingestion runs,
+verifying additive writes) are kept in Postgres, not cleaned up — deliberate,
+so Phase 3 has real data to test against.
+**Goal:** Build `app.py` (Streamlit, Ingest + Ask tabs) — Phase 3.
+**Done when:** `streamlit run app.py` lets a user type a folder path +
+customer name to ingest, then pick a customer from a dropdown and get a
+grounded, sourced chat answer scoped to that customer.
 
 ## System Status
 | Component | Status | Notes |
@@ -40,15 +46,14 @@ query returns a sane, sourced answer.
 | RAG base (vector_store.py, create_database.py, docker-compose.yml, Dockerfile, init.sql) | ✅ Live | Copied in, verified end-to-end (indexing + scoped retrieval + isolation); `.docx`/`.xlsx`/`.pptx`/OCR parsing extended in |
 | `api.py` (optional HTTP boundary) | ❌ Removed | Unauthenticated, let `context_tag` be spoofed/omitted — see `docs/ARCHITECTURE.md` |
 | Web-search/agent step | ❌ Cut | Reduced to one fixed non-judgmental tool call — see `docs/ARCHITECTURE.md` |
-| `ingest.py` / `ingest_tools.py` | ⏸ Deferred | Not started |
+| `ingest.py` / `read_local_files.py` | ✅ Live | Verified end-to-end against real Teva folder; merged to `main` |
 | `app.py` (Streamlit, Ingest + Ask tabs) | ⏸ Deferred | Not started |
-| Git repo | ✅ Live | `rag-base-setup` branch, author `maayan-chen <maayan18058@gmail.com>` |
+| Git repo | ✅ Live | `main`, author `maayan-chen <maayan18058@gmail.com>` |
 
 ## Next Up
-1. Write `ingest_tools.py` → `read_local_files()`, test standalone against
-   the Teva folder.
-2. Write `ingest.py` → `run_ingestion()` (file reading → chunk → tag → save,
-   no agent), test via CLI wrapper.
+1. Write `app.py` — Ingest tab (folder path + customer name inputs,
+   calls `run_ingestion()`) and Ask tab (customer dropdown, chat UI scoped by
+   `context_tag`).
 
 ## Known Issues
 | Issue | Severity | Notes |

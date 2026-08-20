@@ -56,3 +56,20 @@ for the sanity check: index a small text slice instead of the whole file.
 Real fix, not yet implemented: batch `save_to_pgvector` calls (e.g. embed in
 groups of chunks under the account's TPM limit) if real customer folders turn
 out to be large enough to trip this. → `vector_store.py`, `create_database.py`
+
+## `PGVector.from_documents([])` doesn't no-op on an empty list — it throws
+Calling `save_to_pgvector([])` (empty chunk list — e.g. a customer folder
+with zero ingestible files) doesn't skip the write like an empty loop would
+suggest. It still issues one INSERT with no row data and fails with
+`psycopg.errors.NotNullViolation: null value in column "id"` — a raw
+library/SQL error, not anything that names "empty input" as the cause.
+Nothing upstream (`split_text([])`, `set_context_tag([], ...)`) raises first,
+so the failure only surfaces at the DB call, several functions removed from
+where the empty list originated. Don't chase this by looking for a bug in
+`split_text`/`set_context_tag` — both correctly return `[]` unchanged;
+`PGVector.from_documents` is the one that assumes a non-empty batch.
+`ingest.py`'s `run_ingestion()` now guards against this by checking
+`if not results:` right after `read_local_files()` and returning early with a
+clean "no ingestible files" message — any other caller of
+`save_to_pgvector`/`PGVector.from_documents` needs the same guard, since the
+library itself doesn't provide one. → `ingest.py`
