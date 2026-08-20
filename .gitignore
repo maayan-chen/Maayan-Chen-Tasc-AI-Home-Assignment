@@ -19,3 +19,6 @@ venv/
 
 # ggshield local cache
 .cache_ggshield
+
+# Claude Code harness state
+.claude/scheduled_tasks.lock

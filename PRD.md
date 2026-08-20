@@ -72,7 +72,7 @@ for developer testing only).
 **Core Functionality**
 - ✅ Ingest tab: folder path input + customer name input + "Run Ingestion
   Agent" button
-- ✅ Deterministic local file reading (`.txt`/`.md`/`.pdf`/`.docx`/`.xlsx`)
+- ✅ Deterministic local file reading (`.txt`/`.md`/`.pdf`/`.docx`/`.xlsx`/`.pptx`)
   from a user-specified folder, no special-casing between project files and
   meeting summaries
 - ✅ OCR fallback for PDFs whose embedded text layer is broken or absent
@@ -106,8 +106,8 @@ for developer testing only).
   `init.sql` from `References/Nivs-RAG/` unchanged; `Dockerfile` reused with
   Tesseract + Hebrew language pack added as a system dependency;
   `vector_store.py` reused with its `extract_content_from_bytes()` extended
-  for `.docx`/`.xlsx` support, a PDF OCR fallback, and direct OCR for
-  `.png`/`.jpg`/`.jpeg` files
+  for `.docx`/`.xlsx`/`.pptx` support, a PDF OCR fallback, and direct OCR
+  for `.png`/`.jpg`/`.jpeg` files
 - ✅ New `ingest_agent.py` with a thin CLI wrapper (`argparse`) for
   standalone testing before the UI exists
 - ✅ New `ingest_tools.py` (file reading + web search helpers)
@@ -223,8 +223,8 @@ customer-handoff-rag/
 ├── docker-compose.yml      # Postgres+pgvector + app service (unchanged from Nivs-RAG)
 ├── Dockerfile               # REUSED, EXTENDED — adds tesseract-ocr + tesseract-ocr-heb system packages
 ├── init.sql                 # unchanged from Nivs-RAG
-├── requirements.txt         # Nivs-RAG deps + streamlit + duckduckgo-search + python-docx + openpyxl + pytesseract + Pillow
-├── vector_store.py          # REUSED, EXTENDED — pgvector connection; extract_content_from_bytes() gains .docx/.xlsx parsing + PDF OCR fallback + image OCR
+├── requirements.txt         # Nivs-RAG deps + streamlit + duckduckgo-search + python-docx + openpyxl + python-pptx + pytesseract + Pillow
+├── vector_store.py          # REUSED, EXTENDED — pgvector connection; extract_content_from_bytes() gains .docx/.xlsx/.pptx parsing + PDF OCR fallback + image OCR
 ├── create_database.py       # REUSED — split_text(), save_to_pgvector(), set_context_tag()
 ├── models.py                 # REUSED UNCHANGED — Pydantic request/response models
 ├── api.py                    # REUSED UNCHANGED — optional FastAPI service boundary, unused by app.py
@@ -282,13 +282,20 @@ customer-handoff-rag/
   correctly regardless of language setting).
 - **Direct OCR for image files:** `.png`/`.jpg`/`.jpeg` files found in the
   customer folder (e.g. a slide export or a chat-log screenshot) are always
-  routed straight to `pytesseract`, using the same call as the PDF OCR
-  fallback — no "should I OCR this" detection step, since an image file has
-  no embedded text layer to check in the first place, unlike a PDF. Same
-  deterministic, no-LLM-judgment principle as the rest of ingestion: OCR
-  either extracts legible text or it doesn't, and a low-yield/garbled OCR
-  result is just weaker source content, filtered out the same way any other
-  low-relevance chunk is — at query time, not ingestion time.
+  routed straight to `pytesseract` — no "should I OCR this" detection step,
+  since an image file has no embedded text layer to check in the first
+  place, unlike a PDF. Same deterministic, no-LLM-judgment principle as the
+  rest of ingestion: OCR either extracts legible text or it doesn't, and a
+  low-yield/garbled OCR result is just weaker source content, filtered out
+  the same way any other low-relevance chunk is — at query time, not
+  ingestion time. **Uses `lang="heb+eng"`, unlike the PDF fallback's
+  `lang="heb"`:** an arbitrary dropped-in image has no known language ahead
+  of time (could be an English email screenshot or a Hebrew WhatsApp
+  screenshot), unlike a PDF already routed to OCR because its known-Hebrew
+  text layer is untrustworthy. Validated against two real screenshots:
+  `lang="heb"` badly garbled an all-English screenshot, while `lang="heb+eng"`
+  correctly read both an all-English and an all-Hebrew one — see
+  `docs/ARCHITECTURE.md`.
 
 ## 7. Features
 
@@ -302,15 +309,15 @@ customer-handoff-rag/
   3. Call `ingest_agent.run_ingestion(customer_name, folder_path)`
      synchronously, wrapped in `st.spinner`.
   4. Deterministically walk the folder, read each
-     `.txt`/`.md`/`.pdf`/`.docx`/`.xlsx`/`.png`/`.jpg`/`.jpeg` via an
+     `.txt`/`.md`/`.pdf`/`.docx`/`.xlsx`/`.pptx`/`.png`/`.jpg`/`.jpeg` via an
      extended `extract_content_from_bytes()` (reused from `vector_store.py`,
-     adding `python-docx` and `openpyxl` parsing branches alongside the
-     existing `pypdf`/UTF-8 paths) — no distinction made between project
-     files and meeting summaries. For PDFs, if `pypdf`'s extracted text
-     looks unreliable (see OCR fallback rule in Section 6), the page is
-     re-read via OCR instead. Image files are always routed straight to
-     OCR (see Section 6). Other unsupported file types are skipped, not
-     errored.
+     adding `python-docx`, `openpyxl`, and `python-pptx` parsing branches
+     alongside the existing `pypdf`/UTF-8 paths) — no distinction made
+     between project files and meeting summaries. For PDFs, if `pypdf`'s
+     extracted text looks unreliable (see OCR fallback rule in Section 6),
+     the page is re-read via OCR instead. Image files are always routed
+     straight to OCR (see Section 6). Other unsupported file types are
+     skipped, not errored.
   5. Agent formulates a web search query from the customer name + a skim of
      local files, runs `DuckDuckGoSearchRun`, optionally synthesizes a short
      briefing paragraph.
@@ -358,7 +365,7 @@ customer-handoff-rag/
 | Embeddings | `OpenAIEmbeddings` | Reused from `vector_store.py`, unchanged |
 | Vector store | Postgres + pgvector (`langchain-postgres` `PGVector`) | Shared collection across all customers |
 | Web search | `duckduckgo-search` via `langchain_community.tools.DuckDuckGoSearchRun` | New dependency; matches `References/AI-Agent/tools.py` pattern |
-| File parsing | `pypdf`, plain UTF-8 decode, `python-docx`, `openpyxl` | Via extended `extract_content_from_bytes()` |
+| File parsing | `pypdf`, plain UTF-8 decode, `python-docx`, `openpyxl`, `python-pptx` | Via extended `extract_content_from_bytes()` |
 | OCR | `pytesseract` + `tesseract-ocr`/`tesseract-ocr-heb` (system), `PyMuPDF` (page rasterization), `Pillow` | PDF fallback triggered only when `pypdf`'s text extraction looks unreliable; always-on for `.png`/`.jpg`/`.jpeg` files — see Section 6 |
 | DB driver | `psycopg` | Reused connection helpers in `vector_store.py` |
 | Optional API boundary | FastAPI (`api.py`) | Kept working, unused by `app.py` |
@@ -366,8 +373,8 @@ customer-handoff-rag/
 | Config | `python-dotenv`, `.env` | `OPENAI_API_KEY`, `PGVECTOR_CONNECTION`/`PGVECTOR_COLLECTION`, `POSTGRES_*` |
 
 **New dependencies to add to `requirements.txt`:** `streamlit`,
-`duckduckgo-search`, `python-docx`, `openpyxl`, `pytesseract`, `Pillow`,
-`PyMuPDF`.
+`duckduckgo-search`, `python-docx`, `openpyxl`, `python-pptx`, `pytesseract`,
+`Pillow`, `PyMuPDF`.
 
 **New system dependency (`Dockerfile`):** `tesseract-ocr` and
 `tesseract-ocr-heb` (the Hebrew language pack) via `apt-get`. Confirmed
@@ -476,7 +483,8 @@ sample data (`data/alice_in_wonderland.md`) before any new code is written.
 **Goal:** `extract_content_from_bytes()` handles every file type expected in
 real customer folders, including the Hebrew-PDF OCR fallback and image OCR.
 **Deliverables:**
-- ✅ `.docx` (`python-docx`) and `.xlsx` (`openpyxl`) parsing branches added
+- ✅ `.docx` (`python-docx`), `.xlsx` (`openpyxl`), and `.pptx`
+  (`python-pptx`) parsing branches added
 - ✅ PDF OCR fallback added: detect unreliable `pypdf` extraction, rasterize
   via PyMuPDF, OCR via `pytesseract` (`lang="heb"`)
 - ✅ `.png`/`.jpg`/`.jpeg` branch added: load via Pillow, OCR directly via

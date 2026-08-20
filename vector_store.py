@@ -2,14 +2,23 @@ from __future__ import annotations
 
 import os
 from io import BytesIO
+import docx
+import fitz  # PyMuPDF
+import openpyxl
 import psycopg
-from fastapi import HTTPException
+import pytesseract
+from PIL import Image
+from pptx import Presentation
 from dotenv import load_dotenv
 from langchain_openai import OpenAIEmbeddings
 from langchain_postgres import PGVector
 from pypdf import PdfReader
 
 load_dotenv()
+
+
+class ContentExtractionError(Exception):
+    """Raised when a file's content can't be extracted as usable text."""
 
 
 def get_pgvector_connection() -> str:
@@ -74,18 +83,106 @@ def create_vector_store_from_documents(documents, pre_delete_collection: bool = 
     return store
 
 
-def extract_content_from_bytes(raw_bytes: bytes, source: str) -> str:
-    if source.lower().endswith(".pdf"):
-        reader = PdfReader(BytesIO(raw_bytes))
-        pages = [page.extract_text() or "" for page in reader.pages]
-        content = "\n".join(pages).strip()
-        if not content:
-            raise HTTPException(status_code=400, detail="Uploaded PDF has no extractable text.")
+def _is_text_unreliable(text: str) -> bool:
+    """Detect a PDF text layer that's empty or looks like broken font-encoding
+    garbage rather than real content (see docs/ARCHITECTURE.md)."""
+    stripped = text.strip()
+    if not stripped:
+        return True
+    recognized = sum(1 for c in stripped if c.isalpha() or c.isspace())
+    return (recognized / len(stripped)) < 0.5
+
+
+def _extract_pdf(raw_bytes: bytes) -> str:
+    reader = PdfReader(BytesIO(raw_bytes))
+    pages = [page.extract_text() or "" for page in reader.pages]
+    content = "\n".join(pages).strip()
+    if not _is_text_unreliable(content):
         return content
+
+    # lang="heb", not "heb+eng": validated against a real Hebrew PDF where
+    # the mixed-language model introduced extra misreads on Hebrew glyphs
+    # (see docs/ARCHITECTURE.md). PDFs hit this fallback because their
+    # existing (single-language, Hebrew) text layer is untrustworthy, so
+    # the document's language is already known going in.
+    doc = fitz.open(stream=raw_bytes, filetype="pdf")
+    ocr_pages = []
+    for page in doc:
+        pixmap = page.get_pixmap(dpi=300)
+        image = Image.open(BytesIO(pixmap.tobytes("png")))
+        ocr_pages.append(pytesseract.image_to_string(image, lang="heb").strip())
+    doc.close()
+    content = "\n".join(ocr_pages).strip()
+    if not content:
+        raise ContentExtractionError("PDF has no extractable text, even after OCR.")
+    return content
+
+
+def _extract_image(raw_bytes: bytes) -> str:
+    # lang="heb+eng": unlike a PDF routed to OCR, an arbitrary dropped-in
+    # image (chat/email screenshot, slide export) has no known language
+    # ahead of time and may mix Hebrew and English in the same image (see
+    # docs/ARCHITECTURE.md) — confirmed against real screenshots of both.
+    image = Image.open(BytesIO(raw_bytes))
+    return pytesseract.image_to_string(image, lang="heb+eng").strip()
+
+
+def _extract_docx(raw_bytes: bytes) -> str:
+    document = docx.Document(BytesIO(raw_bytes))
+    paragraphs = [p.text for p in document.paragraphs if p.text.strip()]
+    content = "\n".join(paragraphs).strip()
+    if not content:
+        raise ContentExtractionError("DOCX has no extractable text.")
+    return content
+
+
+def _extract_xlsx(raw_bytes: bytes) -> str:
+    workbook = openpyxl.load_workbook(BytesIO(raw_bytes), data_only=True)
+    lines = []
+    for sheet in workbook.worksheets:
+        for row in sheet.iter_rows(values_only=True):
+            cells = [str(cell) for cell in row if cell is not None]
+            if cells:
+                lines.append(" | ".join(cells))
+    content = "\n".join(lines).strip()
+    if not content:
+        raise ContentExtractionError("XLSX has no extractable text.")
+    return content
+
+
+def _extract_pptx(raw_bytes: bytes) -> str:
+    presentation = Presentation(BytesIO(raw_bytes))
+    lines = []
+    for slide in presentation.slides:
+        for shape in slide.shapes:
+            if shape.has_text_frame and shape.text_frame.text.strip():
+                lines.append(shape.text_frame.text.strip())
+    content = "\n".join(lines).strip()
+    if not content:
+        raise ContentExtractionError("PPTX has no extractable text.")
+    return content
+
+
+def extract_content_from_bytes(raw_bytes: bytes, source: str) -> str:
+    extension = source.lower().rsplit(".", 1)[-1] if "." in source else ""
+
+    if extension == "pdf":
+        return _extract_pdf(raw_bytes)
+    if extension in ("png", "jpg", "jpeg"):
+        return _extract_image(raw_bytes)
+    if extension == "docx":
+        return _extract_docx(raw_bytes)
+    if extension == "xlsx":
+        return _extract_xlsx(raw_bytes)
+    if extension == "pptx":
+        return _extract_pptx(raw_bytes)
+
     try:
         content = raw_bytes.decode("utf-8")
     except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="Uploaded file must be UTF-8 text or PDF.")
+        raise ContentExtractionError(
+            f"Unsupported file type for '{source}': not UTF-8 text and no parser registered."
+        )
     if not content.strip():
-        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+        raise ContentExtractionError(f"'{source}' is empty.")
     return content

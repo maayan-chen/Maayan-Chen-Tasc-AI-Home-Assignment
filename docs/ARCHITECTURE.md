@@ -91,16 +91,34 @@ budget; a real production version of this tool would need tests around
 
 ## Images are always OCR'd, no LLM pre-classification
 `.png`/`.jpg`/`.jpeg` files found in a customer folder are always routed
-through `pytesseract`, the same call used for the PDF OCR fallback — no
-vision-model step decides first whether an image "looks like text" (a
-slide/screenshot) versus a photo or diagram. Rejected: an LLM vision call to
-classify each image before deciding whether to OCR it. That would reintroduce
-the same ingestion-time LLM judgment layer already rejected for relevance
-filtering (see above), and it doesn't prevent a real failure mode — OCR on a
-non-text image just yields empty/garbled text, which is harmless and gets
-filtered out at query time by `min_relevance` like any other low-signal
-chunk, the same way a low-quality OCR'd PDF page is handled. A misclassified
-image (real slide marked "not text" and skipped) would be a worse, silent
-failure than always-OCR's worst case. Cost: OCR runs on some images that
-turn out to have no useful text — cheap and local, not worth avoiding.
-→ `vector_store.py`
+through `pytesseract` — no vision-model step decides first whether an image
+"looks like text" (a slide/screenshot) versus a photo or diagram. Rejected:
+an LLM vision call to classify each image before deciding whether to OCR it.
+That would reintroduce the same ingestion-time LLM judgment layer already
+rejected for relevance filtering (see above), and it doesn't prevent a real
+failure mode — OCR on a non-text image just yields empty/garbled text, which
+is harmless and gets filtered out at query time by `min_relevance` like any
+other low-signal chunk, the same way a low-quality OCR'd PDF page is handled.
+A misclassified image (real slide marked "not text" and skipped) would be a
+worse, silent failure than always-OCR's worst case. Cost: OCR runs on some
+images that turn out to have no useful text — cheap and local, not worth
+avoiding. → `vector_store.py`
+
+## Image OCR uses `lang="heb+eng"`; PDF OCR fallback uses `lang="heb"`
+The two OCR call sites use different Tesseract language settings, and this is
+deliberate, not an inconsistency. PDF OCR only fires when a PDF's existing
+text layer is untrustworthy (see `context_tag`-adjacent note above on
+detection) — by the time OCR runs, the document's language is already known
+(Hebrew, per the validated real-world case), so `lang="heb"` is correct and
+`lang="heb+eng"` was already shown to introduce extra misreads on pure-Hebrew
+text. A dropped-in image (chat/email screenshot, slide export) has no such
+prior — it's whatever a consultant happened to paste into the folder, and can
+be pure English, pure Hebrew, or a mix in the same image. Confirmed against
+two real screenshots: `lang="heb"` badly garbled an all-English email
+screenshot (readable text turned into near-random Hebrew-like glyphs), while
+`lang="heb+eng"` correctly read both an all-English screenshot and an
+all-Hebrew one. Rejected: a single shared `lang` setting for both call sites
+— whichever choice is picked, one of the two real cases already observed in
+testing degrades badly. Cost: two hardcoded language strings to keep straight
+instead of one — worth it since guessing wrong on either path produces
+unusable text, not just marginally worse text. → `vector_store.py`
