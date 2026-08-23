@@ -34,7 +34,7 @@ def list_customers() -> list[str]:
             return [row[0] for row in cur.fetchall()]
 
 
-st.set_page_config(page_title="Customer Handoff RAG Tool", layout="wide")
+st.set_page_config(page_title="Customers RAG Tool", layout="wide")
 
 st.markdown(
     """
