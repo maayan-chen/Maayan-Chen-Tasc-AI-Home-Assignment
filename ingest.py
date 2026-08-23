@@ -49,13 +49,14 @@ def run_ingestion(customer_name: str, folder_path: str) -> dict:
     indexed = _get_indexed_file_hashes(context_tag)
 
     documents = []
+    files_to_replace = []
     files_skipped = 0
     for content, source, file_hash in results:
         if indexed.get(source) == file_hash:
             files_skipped += 1
             continue
         if source in indexed:
-            _delete_indexed_file(context_tag, source)
+            files_to_replace.append(source)
         documents.append(
             Document(page_content=content, metadata={"source": source, "file_hash": file_hash})
         )
@@ -67,6 +68,13 @@ def run_ingestion(customer_name: str, folder_path: str) -> dict:
     chunks = split_text(documents)
     chunks = set_context_tag(chunks, context_tag)
     save_to_pgvector(chunks, pre_delete_collection=False)
+
+    # Only delete a changed file's old chunks after its replacement chunks
+    # are safely saved — deleting first would lose that file's content for
+    # good if save_to_pgvector then failed (e.g. an OpenAI TPM rate limit,
+    # see docs/LESSONS.md).
+    for source in files_to_replace:
+        _delete_indexed_file(context_tag, source)
 
     print(
         f"Ingested {len(documents)} files into {len(chunks)} chunks "

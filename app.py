@@ -144,20 +144,25 @@ else:
     if user_input := st.chat_input("Ask a question about this customer"):
         st.session_state["messages"].append({"role": "user", "content": user_input})
 
-        with st.spinner("Thinking..."):
-            result = answer_question(user_input, selected_customer)
-
-        if result["answer"] is None:
-            answer_content = "I don't have enough information to answer that."
+        try:
+            with st.spinner("Thinking..."):
+                result = answer_question(user_input, selected_customer)
+        except Exception as e:
             st.session_state["messages"].append(
-                {"role": "assistant", "content": answer_content, "sources": []}
+                {"role": "assistant", "content": f"Something went wrong answering that: {e}", "sources": []}
             )
         else:
-            st.session_state["messages"].append(
-                {
-                    "role": "assistant",
-                    "content": result["answer"],
-                    "sources": result["sources"],
-                }
-            )
+            if result["answer"] is None:
+                answer_content = "I don't have enough information to answer that."
+                st.session_state["messages"].append(
+                    {"role": "assistant", "content": answer_content, "sources": []}
+                )
+            else:
+                st.session_state["messages"].append(
+                    {
+                        "role": "assistant",
+                        "content": result["answer"],
+                        "sources": result["sources"],
+                    }
+                )
         st.rerun()
