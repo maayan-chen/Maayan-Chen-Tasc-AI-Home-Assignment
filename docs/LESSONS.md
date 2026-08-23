@@ -73,3 +73,23 @@ where the empty list originated. Don't chase this by looking for a bug in
 clean "no ingestible files" message — any other caller of
 `save_to_pgvector`/`PGVector.from_documents` needs the same guard, since the
 library itself doesn't provide one. → `ingest.py`
+
+## Re-running ingestion does not retroactively fix already-ingested files
+Fixing a chunking/extraction bug (e.g. the header-loss bug fixed for `.xlsx`,
+see `docs/ARCHITECTURE.md`) does not automatically repair a customer's
+already-indexed data — the natural assumption "ship the fix, click Ingest
+again" silently does nothing for unchanged files. `ingest.py`'s dedup logic
+(`_get_indexed_file_hashes`, `indexed.get(source) == file_hash`) skips any
+file whose content hash already matches what's indexed, and a code change
+doesn't touch the file's bytes, so the hash is identical and the file is
+skipped every time — the stale, buggy chunks stay in Postgres indefinitely,
+mixed in with correctly-chunked data from any newly-ingested file. This
+surfaced when re-ingesting the real Teva folder after the `.xlsx` header fix:
+the CLI reported "3 unchanged files skipped," confirming the fix had not
+actually reached the live data despite the code being correct and deployed.
+The old chunks must be explicitly deleted (`DELETE FROM
+langchain_pg_embedding WHERE cmetadata->>'context_tag' = ... AND
+cmetadata->>'source' = ...`) before re-running ingestion, for every file
+whose *processing logic* changed even though its *bytes* didn't. Don't chase
+this by looking for a bug in the new extraction/chunking code — it's correct;
+the bug is that old rows were never told they're stale. → `ingest.py`

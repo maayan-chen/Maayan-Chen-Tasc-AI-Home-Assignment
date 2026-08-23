@@ -36,6 +36,19 @@ def _delete_indexed_file(context_tag: str, source: str) -> None:
         conn.commit()
 
 
+def _chunk_xlsx_documents(documents: list[Document]) -> list[Document]:
+    """Chunk spreadsheet-derived documents one row per chunk, instead of
+    running them through the shared character splitter — see
+    docs/ARCHITECTURE.md for why xlsx ingestion diverges from split_text()."""
+    chunks = []
+    for doc in documents:
+        for row_text in doc.page_content.split("\n"):
+            row_text = row_text.strip()
+            if row_text:
+                chunks.append(Document(page_content=row_text, metadata=dict(doc.metadata)))
+    return chunks
+
+
 def run_ingestion(customer_name: str, folder_path: str) -> dict:
     context_tag = slugify(customer_name)
     if not context_tag:
@@ -65,7 +78,9 @@ def run_ingestion(customer_name: str, folder_path: str) -> dict:
         print(f"No new or changed files in {folder_path}; {files_skipped} unchanged file(s) skipped.")
         return {"files_read": 0, "chunks_saved": 0, "files_skipped": files_skipped}
 
-    chunks = split_text(documents)
+    xlsx_documents = [d for d in documents if d.metadata["source"].lower().endswith(".xlsx")]
+    other_documents = [d for d in documents if not d.metadata["source"].lower().endswith(".xlsx")]
+    chunks = split_text(other_documents) + _chunk_xlsx_documents(xlsx_documents)
     chunks = set_context_tag(chunks, context_tag)
     save_to_pgvector(chunks, pre_delete_collection=False)
 

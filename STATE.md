@@ -1,8 +1,8 @@
 <!-- This file must stay under 80 lines. If it grows, prune or move content to docs/. -->
 # Customer Handoff RAG Tool — Current State
-Last updated: 2026-08-23 (Phase 3 Streamlit UI shipped on `streamlit-ui`
-branch; real Teva data indexed in Postgres; now focused on improving RAG
-quality)
+Last updated: 2026-08-23 (xlsx tabular-retrieval fix shipped on
+`improve-rag-tabular-retrieval` branch; real Teva xlsx data re-ingested with
+header-labeled chunks)
 
 ## Project Summary
 A Streamlit app (Ingest tab + Ask tab) that helps a new TASC team get up to
@@ -43,8 +43,15 @@ sidebar+main-page layout so `st.chat_input` docks to the viewport bottom (see
 data-loss bug in `ingest.py`'s dedup path (old chunks now deleted only after
 new ones save successfully) and added unhandled chat error handling in
 `app.py`.
-**Goal:** Improve RAG quality (retrieval/answer quality) — scope not yet
-decided.
+**Done (tabular retrieval fix):** `_extract_xlsx()` now labels every cell
+with its column header (heuristic-detected header row, not assumed to be
+row 1 — see `docs/ARCHITECTURE.md`); `.xlsx` documents are chunked one row
+per chunk in `ingest.py` instead of the shared character splitter; the
+`query_rag.py` prompt uses `<documents>` XML tags with per-chunk source
+attribution. Real `teva` context_tag's stale xlsx chunks deleted and
+re-ingested (dedup-by-hash skips unchanged files — see `docs/LESSONS.md`);
+verified against a real salary question, correct sourced answer.
+**Goal:** Further RAG quality improvements, if any — scope not yet decided.
 
 ## System Status
 | Component | Status | Notes |
@@ -55,11 +62,11 @@ decided.
 | Web-search/agent step | ❌ Cut | Reduced to one fixed non-judgmental tool call — see `docs/ARCHITECTURE.md` |
 | `ingest.py` / `read_local_files.py` | ✅ Live | Verified end-to-end against real Teva folder; merged to `main` |
 | `app.py` (Streamlit, sidebar Ingest + main-page Ask) | ✅ Live | Shipped on `streamlit-ui` branch; delete-before-insert bug and chat error handling fixed since |
+| xlsx tabular retrieval (header-labeled extraction, row-based chunking, XML-tagged prompt) | ✅ Live | On `improve-rag-tabular-retrieval` branch; real `teva` xlsx data re-ingested — see `docs/ARCHITECTURE.md` |
 | Git repo | ✅ Live | `main`, author `maayan-chen <maayan18058@gmail.com>` |
 
 ## Next Up
-1. Improve RAG quality — retrieval and/or answer quality; concrete scope not
-   yet decided.
+1. None pending — decide next focus area.
 
 ## Known Issues
 | Issue | Severity | Notes |

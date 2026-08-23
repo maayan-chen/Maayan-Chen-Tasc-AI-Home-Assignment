@@ -132,6 +132,43 @@ worse, silent failure than always-OCR's worst case. Cost: OCR runs on some
 images that turn out to have no useful text — cheap and local, not worth
 avoiding. → `vector_store.py`
 
+## Spreadsheet rows are chunked row-aligned, not by the shared character splitter
+`.xlsx`-sourced documents bypass `create_database.py`'s `split_text()`
+(the single, file-type-agnostic `RecursiveCharacterTextSplitter`, chunk_size
+300) entirely; `ingest.py`'s `_chunk_xlsx_documents()` instead splits on `"\n"`
+so each chunk is exactly one table row. Chosen because character-based
+chunking is provably wrong for tabular data: a 300-char window slices
+mid-table with no concept of row boundaries, severing a value from the header
+row that names its column (confirmed against real Teva data — a chunk
+containing `495000` with no indication whether that's a salary or an employee
+level). This is the first file-type-specific chunking branch in the codebase
+— previously `split_text()` was implicitly "one strategy for everything."
+Rejected: keep the shared splitter and rely on chunk overlap to preserve
+header context — overlap only helps when the header lands within one
+chunk_size window of the row using it, which breaks on any sheet with more
+than a handful of rows. Cost: two chunking code paths to keep in sync instead
+of one — worth it since the bug this fixes was silently wrong answers, not a
+crash. → `ingest.py`, `vector_store.py`
+
+## xlsx header row is detected by heuristic, not assumed to be row 1
+`_extract_xlsx()` treats the first row with more than one non-empty cell as
+a sheet's header row, rather than unconditionally using
+`sheet.iter_rows(values_only=True)`'s first yielded row. Chosen because every
+real Teva xlsx file has 1–4 title/banner rows (a single non-empty cell, e.g.
+"Teva HQ Finance — Org Redesign...") and often a blank row before the actual
+column headers — confirmed by direct inspection, not assumption. Taking row 1
+literally would have labeled every data row with banner text as its "header"
+(e.g. `טבע תעשיות פרמצבטיות...: 620000`), which is worse than the original
+bug: confidently wrong field names instead of no field names. Rejected: a
+fixed row-skip count (e.g. "always skip the first N rows") — brittle across
+sheets with a different number of banner rows, and one of the real files
+(`Compensation Cost Summary`) has zero banner rows before its header, so a
+fixed skip would misfire in the opposite direction. Cost: a sheet whose real
+header row happens to have only one non-empty cell (single-column table) is
+misdetected — not observed in real data, and a single-column table has no
+column-mixup failure mode to begin with, so this is an acceptable gap.
+→ `vector_store.py`
+
 ## Image OCR uses `lang="heb+eng"`; PDF OCR fallback uses `lang="heb"`
 The two OCR call sites use different Tesseract language settings, and this is
 deliberate, not an inconsistency. PDF OCR only fires when a PDF's existing

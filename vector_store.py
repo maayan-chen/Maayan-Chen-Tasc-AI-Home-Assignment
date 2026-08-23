@@ -140,10 +140,27 @@ def _extract_xlsx(raw_bytes: bytes) -> str:
     workbook = openpyxl.load_workbook(BytesIO(raw_bytes), data_only=True)
     lines = []
     for sheet in workbook.worksheets:
-        for row in sheet.iter_rows(values_only=True):
-            cells = [str(cell) for cell in row if cell is not None]
-            if cells:
-                lines.append(" | ".join(cells))
+        rows = sheet.iter_rows(values_only=True)
+        # Real customer sheets commonly have 1+ title/banner rows (a single
+        # non-empty cell) and blank rows before the true header row — take
+        # the first row with more than one non-empty cell as the header,
+        # rather than assuming row 1 is always it.
+        header = None
+        for row in rows:
+            if sum(1 for cell in row if cell is not None) > 1:
+                header = row
+                break
+        if header is None:
+            continue
+        header = [str(h) if h is not None else "" for h in header]
+        for row in rows:
+            pairs = [
+                f"{header[i]}: {cell}"
+                for i, cell in enumerate(row)
+                if cell is not None and i < len(header) and header[i]
+            ]
+            if pairs:
+                lines.append(" | ".join(pairs))
     content = "\n".join(lines).strip()
     if not content:
         raise ContentExtractionError("XLSX has no extractable text.")
