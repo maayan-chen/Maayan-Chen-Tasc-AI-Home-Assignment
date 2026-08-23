@@ -48,6 +48,12 @@ interview.
   + chunking + save, plain Python top to bottom. The web-search/tool-calling
   agent step was cut (see `docs/ARCHITECTURE.md`); don't reintroduce it
   without a concrete reason a fixed script can't do the job.
+- Re-ingesting an unchanged folder must not duplicate data. Ingestion hashes
+  each file's content and skips files whose hash already matches what's
+  indexed for that `context_tag`; a changed file's old chunks are deleted
+  before its new ones are saved. This matters more once ingestion is a
+  clickable UI button rather than a one-shot CLI call — don't remove the
+  hash check while "simplifying" ingestion. → `ingest.py`, `read_local_files.py`
 
 ## Execution Discipline
 - **Pause before chaining multi-step or destructive build steps** — confirm
