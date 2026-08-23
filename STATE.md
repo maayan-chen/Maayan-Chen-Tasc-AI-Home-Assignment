@@ -1,7 +1,8 @@
 <!-- This file must stay under 80 lines. If it grows, prune or move content to docs/. -->
 # Customer Handoff RAG Tool — Current State
-Last updated: 2026-08-23 (chat-history-aware retrieval added on
-`chat-history-context` branch, not yet merged)
+Last updated: 2026-08-23 (chat-history-aware retrieval merged to `main` and
+verified against the running app — Ronit role/salary follow-up now resolves
+correctly)
 
 ## Project Summary
 A Streamlit app (Ingest tab + Ask tab) that helps a new TASC team get up to
@@ -26,8 +27,8 @@ and the prompt, by plain concatenation — no LLM query-rewrite (see
 `docs/ARCHITECTURE.md`). Fixes a real bug: a follow-up like "what's her
 salary?" after "What is Ronit's role?" previously retrieved nothing, since
 the pronoun-only question had no name for the embedding to match. `app.py`
-passes `st.session_state["messages"]` (pre-append) as `history`. Not yet
-merged to `main`; not yet re-verified against the running app.
+passes `st.session_state["messages"]` (pre-append) as `history`. Merged to
+`main`; verified live in the app against the Ronit role/salary scenario.
 **Goal:** Further RAG quality improvements, if any — scope not yet decided.
 
 ## System Status
@@ -40,12 +41,11 @@ merged to `main`; not yet re-verified against the running app.
 | `ingest.py` / `read_local_files.py` | ✅ Live | Verified end-to-end against real Teva folder; merged to `main` |
 | `app.py` (Streamlit, sidebar Ingest + main-page Ask) | ✅ Live | Shipped on `streamlit-ui` branch; delete-before-insert bug and chat error handling fixed since |
 | xlsx tabular retrieval (header-labeled extraction, row-based chunking, XML-tagged prompt) | ✅ Live | On `improve-rag-tabular-retrieval` branch; real `teva` xlsx data re-ingested — see `docs/ARCHITECTURE.md` |
-| Chat-history-aware retrieval (`answer_question(history=...)`) | 🟡 On branch | `chat-history-context` branch; not yet merged or UI-verified — see `docs/ARCHITECTURE.md` |
+| Chat-history-aware retrieval (`answer_question(history=...)`) | ✅ Live | Merged to `main`; verified live against Ronit role/salary follow-up — see `docs/ARCHITECTURE.md` |
 | Git repo | ✅ Live | `main`, author `maayan-chen <maayan18058@gmail.com>` |
 
 ## Next Up
-1. Verify chat-history-context branch against the running app (the Ronit
-   role/salary scenario), then merge to `main`.
+1. None pending — decide next focus area.
 
 ## Known Issues
 | Issue | Severity | Notes |
