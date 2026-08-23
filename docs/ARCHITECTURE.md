@@ -66,13 +66,23 @@ task an agent does that a script can't (e.g. skimming local files first to
 target searches at actual content gaps, not just the customer name) — until
 then, adding it back means re-justifying it from scratch. → `ingest_tools.py`
 
-## Streamlit, single app with two tabs
+## Streamlit, single app with sidebar Ingest + main-page Ask
 Chosen over a custom React/HTML frontend: zero frontend build step,
 `streamlit run app.py`, looks like a real chat app via `st.chat_message`, and
-every line is plain Python walkable in an interview. One app with
-`st.tabs(["Ingest", "Ask"])` means no separate ingestion tool to install or
-run. Cost: no native OS folder-picker dialog for a server-side path — the
-folder input is a text field, not a browse button. → `app.py`
+every line is plain Python walkable in an interview. Originally
+`st.tabs(["Ingest", "Ask"])`; switched to `st.sidebar` for Ingest + the main
+page for Ask once real usage showed `st.chat_input` only docks to the true
+bottom of the viewport when it isn't nested inside a tab's content container
+— inside `st.tabs`, it scrolls away with the message history instead of
+staying pinned, which reads as broken next to any normal chat UI (terminal,
+Slack, etc.). Moving Ingest to the sidebar frees the main page for Ask alone,
+so `st.chat_input` can be called at the top level and dock properly. Also
+means switching customer is now a rare, low-visual-weight action (a "Change
+customer" popover next to the "Asking about: X" pill) rather than a dropdown
+sitting in the main flow — matches how infrequently a consultant actually
+switches customers mid-session. Cost: no native OS folder-picker dialog for a
+server-side path — the folder input is a text field, not a browse button.
+→ `app.py`
 
 ## Customer name is always explicit user input, never inferred
 Both the folder path and typed customer name persist across runs (written to

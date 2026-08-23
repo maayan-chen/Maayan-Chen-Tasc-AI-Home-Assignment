@@ -1,33 +1,78 @@
 import argparse
+import re
 
+import psycopg
 from langchain.schema import Document
 from create_database import save_to_pgvector, set_context_tag, split_text
 from read_local_files import read_local_files
+from vector_store import get_psycopg_connection
+
+
+def slugify(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
+
+
+def _get_indexed_file_hashes(context_tag: str) -> dict[str, str]:
+    """Map of source path -> file_hash for every file already indexed under
+    this context_tag."""
+    with psycopg.connect(get_psycopg_connection()) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT DISTINCT cmetadata->>'source', cmetadata->>'file_hash' "
+                "FROM langchain_pg_embedding WHERE cmetadata->>'context_tag' = %s",
+                (context_tag,),
+            )
+            return {source: file_hash for source, file_hash in cur.fetchall()}
+
+
+def _delete_indexed_file(context_tag: str, source: str) -> None:
+    with psycopg.connect(get_psycopg_connection()) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM langchain_pg_embedding "
+                "WHERE cmetadata->>'context_tag' = %s AND cmetadata->>'source' = %s",
+                (context_tag, source),
+            )
+        conn.commit()
 
 
 def run_ingestion(customer_name: str, folder_path: str) -> dict:
-    context_tag = customer_name.strip()
+    context_tag = slugify(customer_name)
     if not context_tag:
         raise ValueError("customer_name is required")
 
     results = read_local_files(folder_path)
     if not results:
         print(f"No ingestible files found in {folder_path}.")
-        return {"files_read": 0, "chunks_saved": 0}
+        return {"files_read": 0, "chunks_saved": 0, "files_skipped": 0}
 
-    documents = [
-        Document(page_content=content, metadata={"source": source})
-        for content, source in results
-    ]
+    indexed = _get_indexed_file_hashes(context_tag)
+
+    documents = []
+    files_skipped = 0
+    for content, source, file_hash in results:
+        if indexed.get(source) == file_hash:
+            files_skipped += 1
+            continue
+        if source in indexed:
+            _delete_indexed_file(context_tag, source)
+        documents.append(
+            Document(page_content=content, metadata={"source": source, "file_hash": file_hash})
+        )
+
+    if not documents:
+        print(f"No new or changed files in {folder_path}; {files_skipped} unchanged file(s) skipped.")
+        return {"files_read": 0, "chunks_saved": 0, "files_skipped": files_skipped}
+
     chunks = split_text(documents)
     chunks = set_context_tag(chunks, context_tag)
     save_to_pgvector(chunks, pre_delete_collection=False)
 
     print(
         f"Ingested {len(documents)} files into {len(chunks)} chunks "
-        f"for context_tag='{context_tag}'"
+        f"for context_tag='{context_tag}' ({files_skipped} unchanged file(s) skipped)"
     )
-    return {"files_read": len(documents), "chunks_saved": len(chunks)}
+    return {"files_read": len(documents), "chunks_saved": len(chunks), "files_skipped": files_skipped}
 
 
 def main():

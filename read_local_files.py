@@ -1,9 +1,10 @@
+import hashlib
 from pathlib import Path
 
 from vector_store import ContentExtractionError, extract_content_from_bytes
 
 
-def read_local_files(folder_path: str) -> list[tuple[str, str]]:
+def read_local_files(folder_path: str) -> list[tuple[str, str, str]]:
     folder = Path(folder_path)
     if not folder.exists():
         raise FileNotFoundError(f"Folder not found: {folder_path}")
@@ -24,6 +25,7 @@ def read_local_files(folder_path: str) -> list[tuple[str, str]]:
             print(f"Skipped {p}: {e}")
             continue
 
-        results.append((content, str(p)))
+        file_hash = hashlib.sha256(raw_bytes).hexdigest()
+        results.append((content, str(p), file_hash))
 
     return results
