@@ -1,7 +1,8 @@
 <!-- This file must stay under 80 lines. If it grows, prune or move content to docs/. -->
 # Customer Handoff RAG Tool — Current State
-Last updated: 2026-08-20 (Phase 2 ingestion shipped and merged to `main`;
-real Teva data indexed in Postgres; Phase 3 Streamlit UI not yet started)
+Last updated: 2026-08-23 (Phase 3 Streamlit UI shipped on `streamlit-ui`
+branch; real Teva data indexed in Postgres; now focused on improving RAG
+quality)
 
 ## Project Summary
 A Streamlit app (Ingest tab + Ask tab) that helps a new TASC team get up to
@@ -34,10 +35,16 @@ Hebrew/English `.docx`/`.xlsx`/`.pptx`/`.pdf`/`.png` files).
 returns a grounded, sourced answer. These 334 rows (two ingestion runs,
 verifying additive writes) are kept in Postgres, not cleaned up — deliberate,
 so Phase 3 has real data to test against.
-**Goal:** Build `app.py` (Streamlit, Ingest + Ask tabs) — Phase 3.
-**Done when:** `streamlit run app.py` lets a user type a folder path +
-customer name to ingest, then pick a customer from a dropdown and get a
-grounded, sourced chat answer scoped to that customer.
+**Done (Phase 3):** `app.py` built on `streamlit-ui` branch — sidebar Ingest
+form (folder path + customer name, calls `run_ingestion()`) and main-page Ask
+chat (`context_tag`-scoped, sourced answers). Switched from `st.tabs` to
+sidebar+main-page layout so `st.chat_input` docks to the viewport bottom (see
+`docs/ARCHITECTURE.md`). Since initial ship: fixed a delete-before-insert
+data-loss bug in `ingest.py`'s dedup path (old chunks now deleted only after
+new ones save successfully) and added unhandled chat error handling in
+`app.py`.
+**Goal:** Improve RAG quality (retrieval/answer quality) — scope not yet
+decided.
 
 ## System Status
 | Component | Status | Notes |
@@ -47,13 +54,12 @@ grounded, sourced chat answer scoped to that customer.
 | `api.py` (optional HTTP boundary) | ❌ Removed | Unauthenticated, let `context_tag` be spoofed/omitted — see `docs/ARCHITECTURE.md` |
 | Web-search/agent step | ❌ Cut | Reduced to one fixed non-judgmental tool call — see `docs/ARCHITECTURE.md` |
 | `ingest.py` / `read_local_files.py` | ✅ Live | Verified end-to-end against real Teva folder; merged to `main` |
-| `app.py` (Streamlit, Ingest + Ask tabs) | ⏸ Deferred | Not started |
+| `app.py` (Streamlit, sidebar Ingest + main-page Ask) | ✅ Live | Shipped on `streamlit-ui` branch; delete-before-insert bug and chat error handling fixed since |
 | Git repo | ✅ Live | `main`, author `maayan-chen <maayan18058@gmail.com>` |
 
 ## Next Up
-1. Write `app.py` — Ingest tab (folder path + customer name inputs,
-   calls `run_ingestion()`) and Ask tab (customer dropdown, chat UI scoped by
-   `context_tag`).
+1. Improve RAG quality — retrieval and/or answer quality; concrete scope not
+   yet decided.
 
 ## Known Issues
 | Issue | Severity | Notes |
