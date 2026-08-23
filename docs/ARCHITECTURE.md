@@ -66,6 +66,54 @@ task an agent does that a script can't (e.g. skimming local files first to
 target searches at actual content gaps, not just the customer name) — until
 then, adding it back means re-justifying it from scratch. → `ingest_tools.py`
 
+## Non-Hebrew documents are translated to Hebrew at ingestion — the one deliberate exception to "no LLM step in ingestion"
+`ingest.py` runs each extracted document through
+`translate_to_hebrew_if_needed()` before chunking: a cheap character-range
+heuristic (`_is_hebrew()`, same style as `_is_text_unreliable()`) checks
+whether the text is already majority-Hebrew, and only documents that aren't
+get one `gpt-4o` translation call. This looks like exactly the kind of
+ingestion-time LLM step already rejected twice above (relevance filtering,
+web-search agent) — it isn't, and the distinction matters enough to spell
+out rather than let this read as a quiet rule violation. Both earlier
+rejections were about *judgment*: an LLM deciding what's relevant enough to
+index, or what's worth searching for — open-ended calls with no fixed
+correct answer, and a second place things can silently go wrong. Translation
+is a fixed, meaning-preserving transform with a checkable outcome (the
+Header: value structure, numbers, and names all round-trip intact — verified
+against a real xlsx org-chart export), not a judgment call about what to
+keep.
+
+The concrete problem this fixes: OpenAI's embedding model places
+same-language paraphrases much closer together (~0.95–0.98 cosine
+similarity, measured directly) than cross-lingual same-meaning text
+(~0.88) — real semantic overlap, but a consistent gap. In a mixed-language
+customer folder, that gap is large enough to silently bias retrieval by
+*source language* rather than relevance: a Hebrew question measurably
+under-retrieved an English-only source document (`Consulting_Services_Agreement.pdf`)
+that a same-language query surfaced easily, even with both individually
+clearing `min_relevance`. Translating the minority language into the
+majority collapses every chunk into one embedding neighborhood, so retrieval
+ranks purely on relevance again. Hebrew, not English, is the ingestion
+target because most real customer files are already Hebrew and
+Hebrew-Hebrew similarity measured tighter than English-English — normalizing
+the minority of files is both cheaper and lower-risk than normalizing the
+majority.
+
+Rejected: translating the *query* instead of the documents (embed both a
+Hebrew and an English version of every question, merge results) — leaves
+ingestion untouched, which fits "no LLM step in ingestion" without
+exception, but does nothing for two documents in different languages that
+already have low mutual similarity; it only helps a query reach docs in its
+*other* language, not documents reach each other. The actual failure mode
+observed was documents siloed by language, not questions failing to cross a
+language boundary. Cost: one more ingestion-time LLM call for non-Hebrew
+files specifically (a minority, per the above), a live dependency on
+translation quality (mistranslation is a new, no longer git-diffable failure
+mode — the DB no longer holds the source document's literal words), and
+content that reads as authored in Hebrew from the start
+even where it was originally English, which the UI does not currently
+disclose. → `ingest.py`, `vector_store.py`
+
 ## Streamlit, single app with sidebar Ingest + main-page Ask
 Chosen over a custom React/HTML frontend: zero frontend build step,
 `streamlit run app.py`, looks like a real chat app via `st.chat_message`, and

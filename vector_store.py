@@ -10,7 +10,7 @@ import pytesseract
 from PIL import Image
 from pptx import Presentation
 from dotenv import load_dotenv
-from langchain_openai import OpenAIEmbeddings
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_postgres import PGVector
 from pypdf import PdfReader
 
@@ -203,3 +203,29 @@ def extract_content_from_bytes(raw_bytes: bytes, source: str) -> str:
     if not content.strip():
         raise ContentExtractionError(f"'{source}' is empty.")
     return content
+
+
+def _is_hebrew(text: str) -> bool:
+    """Heuristic majority-language check, same style as _is_text_unreliable
+    above — no LLM call needed just to decide whether translation is
+    needed (see docs/ARCHITECTURE.md: translation-at-ingestion)."""
+    hebrew_chars = sum(1 for c in text if "א" <= c <= "ת")
+    alpha_chars = sum(1 for c in text if c.isalpha())
+    return alpha_chars > 0 and (hebrew_chars / alpha_chars) > 0.5
+
+
+def translate_to_hebrew_if_needed(content: str) -> str:
+    """Normalize non-Hebrew document text to Hebrew before chunking/embedding,
+    so retrieval isn't split across two embedding neighborhoods by source
+    language (see docs/ARCHITECTURE.md: translation-at-ingestion). A no-op
+    for documents already majority-Hebrew — most real customer files are, so
+    this only spends an LLM call on the minority that need it."""
+    if _is_hebrew(content):
+        return content
+    model = ChatOpenAI(model="gpt-4o")
+    response = model.invoke(
+        "Translate the following document to Hebrew. Preserve structure, "
+        "numbers, names, and formatting as closely as possible. Output only "
+        f"the translated text, nothing else.\n\n{content}"
+    )
+    return response.content

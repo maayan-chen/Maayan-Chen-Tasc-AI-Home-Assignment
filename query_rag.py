@@ -16,6 +16,10 @@ each Header: value pair as a distinct field, not continuous prose.
 If the documents do not contain enough information to answer the question,
 say you don't know — do not guess or use information outside the documents.
 
+The documents may be in a different language than the question below —
+translate as needed, but always write your answer in the same language as
+the Question, regardless of what language the documents are in.
+
 Question: {question}
 
 Answer using only the documents above:
@@ -40,7 +44,7 @@ def answer_question(
     question: str,
     context_tag: str,
     history: list[dict] | None = None,
-    k: int = 3,
+    k: int = 8,
     min_relevance: float = 0.7,
 ) -> dict:
     embedding_function = OpenAIEmbeddings()
@@ -69,7 +73,7 @@ def answer_question(
         context=context_text, question=question, history_block=history_block
     )
 
-    model = ChatOpenAI()
+    model = ChatOpenAI(model="gpt-4o")
     response_text = model.predict(prompt)
 
     sources = [

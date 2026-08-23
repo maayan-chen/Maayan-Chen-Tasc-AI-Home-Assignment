@@ -5,7 +5,7 @@ import psycopg
 from langchain.schema import Document
 from create_database import save_to_pgvector, set_context_tag, split_text
 from read_local_files import read_local_files
-from vector_store import get_psycopg_connection
+from vector_store import get_psycopg_connection, translate_to_hebrew_if_needed
 
 
 def slugify(name: str) -> str:
@@ -70,6 +70,7 @@ def run_ingestion(customer_name: str, folder_path: str) -> dict:
             continue
         if source in indexed:
             files_to_replace.append(source)
+        content = translate_to_hebrew_if_needed(content)
         documents.append(
             Document(page_content=content, metadata={"source": source, "file_hash": file_hash})
         )
