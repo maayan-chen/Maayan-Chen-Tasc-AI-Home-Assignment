@@ -142,11 +142,14 @@ else:
                         st.text(source["content"])
 
     if user_input := st.chat_input("Ask a question about this customer"):
+        history = [
+            {"role": m["role"], "content": m["content"]} for m in st.session_state["messages"]
+        ]
         st.session_state["messages"].append({"role": "user", "content": user_input})
 
         try:
             with st.spinner("Thinking..."):
-                result = answer_question(user_input, selected_customer)
+                result = answer_question(user_input, selected_customer, history=history)
         except Exception as e:
             st.session_state["messages"].append(
                 {"role": "assistant", "content": f"Something went wrong answering that: {e}", "sources": []}

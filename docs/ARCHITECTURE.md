@@ -169,6 +169,25 @@ misdetected — not observed in real data, and a single-column table has no
 column-mixup failure mode to begin with, so this is an acceptable gap.
 → `vector_store.py`
 
+## Chat history is folded into retrieval by concatenation, not an LLM query-rewrite step
+`answer_question()` accepts the last `HISTORY_TURNS` (2) exchanges and prepends
+their raw text to the current question before both the similarity search and
+the final prompt. Chosen to fix a real bug: "What is Ronit's role?" followed
+by "what's her salary?" retrieved nothing useful, since the second question
+alone has no "Ronit" for the embedding to match against. Rejected: an LLM call
+that rewrites the follow-up into a standalone question (e.g. "What is Ronit's
+salary?") before searching — better retrieval on more ambiguous follow-ups,
+but it's a second LLM call per question and reintroduces the kind of
+ingestion-adjacent judgment layer already rejected elsewhere in this project
+(see "No LLM-driven relevance filtering," "No LLM/agent step in ingestion,"
+above) — this one just at query time instead. Plain concatenation is one
+sentence to explain ("we paste the last couple messages onto the question
+before searching and before asking the model") and needs no new dependency or
+call. Cost: works well for short pronoun/reference follow-ups (the observed
+case); degrades on longer conversations that drift across multiple topics,
+since old, now-irrelevant turns get embedded alongside the real question.
+→ `query_rag.py`, `app.py`
+
 ## Image OCR uses `lang="heb+eng"`; PDF OCR fallback uses `lang="heb"`
 The two OCR call sites use different Tesseract language settings, and this is
 deliberate, not an inconsistency. PDF OCR only fires when a PDF's existing
