@@ -1,8 +1,7 @@
 <!-- This file must stay under 80 lines. If it grows, prune or move content to docs/. -->
 # Customer Handoff RAG Tool — Current State
-Last updated: 2026-08-23 (chat-history-aware retrieval merged to `main` and
-verified against the running app — Ronit role/salary follow-up now resolves
-correctly)
+Last updated: 2026-08-23 (Hebrew RAG quality + Hebrew/RTL UI work in
+progress on `improve-hebrew-retrieval-ocr`, not yet merged to `main`)
 
 ## Project Summary
 A Streamlit app (Ingest tab + Ask tab) that helps a new TASC team get up to
@@ -16,20 +15,25 @@ non-judgmental tool call, not worth the complexity). 2-day budget, must stay
 simple enough to fully explain in an interview.
 
 ## Current Task
-Real customer folder used for testing:
-`/Users/maayanchen/Code/Work/Teva_Org_Streamlining_Project` (mixed
-Hebrew/English `.docx`/`.xlsx`/`.pptx`/`.pdf`/`.png` files). Earlier phases
-(RAG base setup, ingestion CLI, Streamlit UI, xlsx tabular-retrieval fix) are
-shipped and merged — see `git log` and `docs/ARCHITECTURE.md` for what/why.
-**Done (chat history):** `answer_question()` (`query_rag.py`) now accepts a
-`history` list (last 2 exchanges) and folds it into both the retrieval query
-and the prompt, by plain concatenation — no LLM query-rewrite (see
-`docs/ARCHITECTURE.md`). Fixes a real bug: a follow-up like "what's her
-salary?" after "What is Ronit's role?" previously retrieved nothing, since
-the pronoun-only question had no name for the embedding to match. `app.py`
-passes `st.session_state["messages"]` (pre-append) as `history`. Merged to
-`main`; verified live in the app against the Ronit role/salary scenario.
-**Goal:** Further RAG quality improvements, if any — scope not yet decided.
+Real customer folders used for testing: `Teva_Org_Streamlining_Project` and
+`Teva_PGTech_Acquisition_Project` (mixed Hebrew/English `.docx`/`.xlsx`/
+`.pptx`/`.pdf`/`.png` files), both ingested under `context_tag='teva'`.
+Earlier phases (RAG base setup, ingestion CLI, Streamlit UI, xlsx
+tabular-retrieval fix, chat history) are shipped and merged to `main` — see
+`git log` and `docs/ARCHITECTURE.md` for what/why.
+
+**In progress, branch `improve-hebrew-retrieval-ocr`, not yet merged:** a
+real bug report (broad Hebrew questions returning "I don't know") led to
+several fixes, all in `docs/ARCHITECTURE.md`: `query_rag.py`'s
+`ChatOpenAI()` was silently defaulting to `gpt-3.5-turbo` (now `gpt-4o`);
+`k` raised 3→8; non-Hebrew documents are now translated to Hebrew at
+ingestion to close a measured cross-lingual embedding gap; the prompt
+answers in the question's language and formats with Markdown
+bullets/paragraphs; the whole UI (`app.py`) is translated to Hebrew and
+RTL. **Known gap:** an English question now often gets answered in Hebrew
+anyway (regression from the translation-at-ingestion fix) — accepted since
+real usage is expected to be Hebrew-majority, see `docs/ARCHITECTURE.md`.
+**Goal:** merge this branch once reviewed; further RAG quality work TBD.
 
 ## System Status
 | Component | Status | Notes |
@@ -42,12 +46,14 @@ passes `st.session_state["messages"]` (pre-append) as `history`. Merged to
 | `app.py` (Streamlit, sidebar Ingest + main-page Ask) | ✅ Live | Shipped on `streamlit-ui` branch; delete-before-insert bug and chat error handling fixed since |
 | xlsx tabular retrieval (header-labeled extraction, row-based chunking, XML-tagged prompt) | ✅ Live | On `improve-rag-tabular-retrieval` branch; real `teva` xlsx data re-ingested — see `docs/ARCHITECTURE.md` |
 | Chat-history-aware retrieval (`answer_question(history=...)`) | ✅ Live | Merged to `main`; verified live against Ronit role/salary follow-up — see `docs/ARCHITECTURE.md` |
+| Hebrew RAG quality fixes (gpt-4o, k=8, translation-at-ingestion, language-matched Markdown answers) + Hebrew/RTL UI | 🔶 On branch | `improve-hebrew-retrieval-ocr`, not yet merged — see `docs/ARCHITECTURE.md` |
 | Git repo | ✅ Live | `main`, author `maayan-chen <maayan18058@gmail.com>` |
 
 ## Next Up
-1. None pending — decide next focus area.
+1. Review and merge `improve-hebrew-retrieval-ocr` to `main`.
 
 ## Known Issues
 | Issue | Severity | Notes |
 |-------|----------|-------|
 | OpenAI account has a low TPM rate limit | Low | See `docs/LESSONS.md` — large folders may need batching |
+| English questions often answered in Hebrew | Low | Post translation-at-ingestion, most context is Hebrew and outweighs the prompt's language instruction for English questions — see `docs/ARCHITECTURE.md` |

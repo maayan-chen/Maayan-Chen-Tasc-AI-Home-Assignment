@@ -4,6 +4,10 @@ from langchain.prompts import ChatPromptTemplate
 from vector_store import create_vector_store
 
 PROMPT_TEMPLATE = """
+IMPORTANT: Regardless of what language the documents below are written in,
+you must write your entire answer in the same language as the Question at
+the bottom of this prompt.
+
 Answer the question using only the documents below. Each document may
 contain table rows formatted as "Header: value | Header: value" — treat
 each Header: value pair as a distinct field, not continuous prose.
@@ -16,13 +20,14 @@ each Header: value pair as a distinct field, not continuous prose.
 If the documents do not contain enough information to answer the question,
 say you don't know — do not guess or use information outside the documents.
 
-The documents may be in a different language than the question below —
-translate as needed, but always write your answer in the same language as
-the Question, regardless of what language the documents are in.
+Break the answer into short paragraphs, and use bullet points or numbered
+lists when covering multiple items, people, or steps. Avoid a single dense
+block of text.
 
 Question: {question}
 
-Answer using only the documents above:
+Remember: answer in the same language as the Question above, using only the
+documents above.
 """
 
 HISTORY_TURNS = 2  # number of prior user/assistant exchanges to carry forward

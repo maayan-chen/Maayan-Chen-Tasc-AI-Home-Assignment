@@ -34,11 +34,17 @@ def list_customers() -> list[str]:
             return [row[0] for row in cur.fetchall()]
 
 
-st.set_page_config(page_title="Customers RAG Tool", layout="wide")
+st.set_page_config(page_title="כלי RAG למסירת לקוחות", layout="wide")
 
 st.markdown(
     """
     <style>
+    [data-testid="stAppViewContainer"], [data-testid="stSidebar"] {
+        direction: rtl;
+    }
+    [data-testid="stChatInput"] textarea {
+        text-align: right;
+    }
     .header-bar {
         background-color: #1A1230;
         padding: 1.25rem 1.5rem;
@@ -62,55 +68,55 @@ st.markdown(
     }
     </style>
     <div class="header-bar">
-        <h1>Customer Handoff RAG Tool</h1>
+        <h1>כלי RAG למסירת לקוחות</h1>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
 with st.sidebar:
-    st.subheader("Ingest a customer")
+    st.subheader("קליטת לקוח")
     last_ingest = load_last_ingest()
-    folder_path = st.text_input("Customer project folder path", value=last_ingest["folder_path"])
+    folder_path = st.text_input("נתיב תיקיית הפרויקט של הלקוח", value=last_ingest["folder_path"])
 
     if folder_path:
         folder = Path(folder_path)
         if not folder.exists():
-            st.error(f"Folder not found: {folder_path}")
+            st.error(f"התיקייה לא נמצאה: {folder_path}")
         elif not folder.is_dir():
-            st.error(f"Not a directory: {folder_path}")
+            st.error(f"זו אינה תיקייה: {folder_path}")
         else:
             file_count = sum(1 for p in folder.rglob("*") if p.is_file() and not p.name.startswith("."))
-            st.success(f"Found {file_count} files in this folder.")
+            st.success(f"נמצאו {file_count} קבצים בתיקייה זו.")
 
-    customer_name = st.text_input("Customer name", value=last_ingest["customer_name"])
+    customer_name = st.text_input("שם הלקוח", value=last_ingest["customer_name"])
 
-    if st.button("Run Ingestion"):
+    if st.button("הרץ קליטה"):
         save_last_ingest(folder_path, customer_name)
         try:
-            with st.spinner("Ingesting..."):
+            with st.spinner("קולט..."):
                 result = run_ingestion(customer_name, folder_path)
         except (FileNotFoundError, NotADirectoryError, ValueError) as e:
             st.error(str(e))
         except Exception as e:
-            st.error(f"Ingestion failed: {e}")
+            st.error(f"הקליטה נכשלה: {e}")
         else:
             skipped = result.get("files_skipped", 0)
-            skipped_note = f" ({skipped} unchanged files skipped)" if skipped else ""
+            skipped_note = f" ({skipped} קבצים ללא שינוי דולגו)" if skipped else ""
             if result["chunks_saved"] == 0:
                 if skipped:
-                    st.info(f"All {skipped} files already ingested and unchanged — nothing to do.")
+                    st.info(f"כל {skipped} הקבצים כבר נקלטו וללא שינוי — אין מה לעשות.")
                 else:
-                    st.warning("No ingestible files found in that folder.")
+                    st.warning("לא נמצאו קבצים ניתנים לקליטה בתיקייה זו.")
             else:
                 st.success(
-                    f"{result['files_read']} files read, {result['chunks_saved']} chunks saved.{skipped_note}"
+                    f"נקראו {result['files_read']} קבצים, נשמרו {result['chunks_saved']} מקטעים.{skipped_note}"
                 )
 
 customers = list_customers()
 
 if not customers:
-    st.info("No customers ingested yet — use the sidebar to ingest one.")
+    st.info("עדיין לא נקלטו לקוחות — השתמשו בסרגל הצד כדי לקלוט לקוח.")
 else:
     if st.session_state.get("context_tag") not in customers:
         st.session_state["context_tag"] = customers[0]
@@ -121,12 +127,12 @@ else:
     pill_col, change_col = st.columns([4, 1])
     with pill_col:
         st.markdown(
-            f'<div class="pill-label">Asking about: {html.escape(selected_customer)}</div>',
+            f'<div class="pill-label">שאלות על: {html.escape(selected_customer)}</div>',
             unsafe_allow_html=True,
         )
     with change_col:
-        with st.popover("Change customer"):
-            new_customer = st.selectbox("Customer", customers, index=customers.index(selected_customer))
+        with st.popover("החלף לקוח"):
+            new_customer = st.selectbox("לקוח", customers, index=customers.index(selected_customer))
             if new_customer != selected_customer:
                 st.session_state["context_tag"] = new_customer
                 st.session_state["messages"] = []
@@ -136,27 +142,30 @@ else:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
             if message.get("sources"):
-                with st.expander("Sources"):
+                with st.expander("מקורות"):
                     for source in message["sources"]:
                         st.markdown(f"**{source['source']}**")
                         st.text(source["content"])
 
-    if user_input := st.chat_input("Ask a question about this customer"):
+    if user_input := st.chat_input("שאלו שאלה על הלקוח"):
         history = [
             {"role": m["role"], "content": m["content"]} for m in st.session_state["messages"]
         ]
         st.session_state["messages"].append({"role": "user", "content": user_input})
 
+        with st.chat_message("user"):
+            st.markdown(user_input)
+
         try:
-            with st.spinner("Thinking..."):
+            with st.chat_message("assistant"), st.spinner("חושב..."):
                 result = answer_question(user_input, selected_customer, history=history)
         except Exception as e:
             st.session_state["messages"].append(
-                {"role": "assistant", "content": f"Something went wrong answering that: {e}", "sources": []}
+                {"role": "assistant", "content": f"משהו השתבש בעת מענה לשאלה: {e}", "sources": []}
             )
         else:
             if result["answer"] is None:
-                answer_content = "I don't have enough information to answer that."
+                answer_content = "אין לי מספיק מידע כדי לענות על כך."
                 st.session_state["messages"].append(
                     {"role": "assistant", "content": answer_content, "sources": []}
                 )

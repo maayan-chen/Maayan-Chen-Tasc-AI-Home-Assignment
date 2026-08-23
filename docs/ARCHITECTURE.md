@@ -114,6 +114,37 @@ content that reads as authored in Hebrew from the start
 even where it was originally English, which the UI does not currently
 disclose. → `ingest.py`, `vector_store.py`
 
+## Chat answers are formatted with Markdown and instructed to match the question's language — reliable for Hebrew, not for English
+`PROMPT_TEMPLATE` (`query_rag.py`) asks the model to break answers into
+short paragraphs and bullet/numbered lists instead of one dense block, and
+to answer in the same language as the question, stated both at the very top
+of the prompt and restated immediately before generation. `app.py` already
+renders assistant messages with `st.markdown()`, so this needed no UI
+change — the model's own bullet/heading syntax renders directly.
+
+The language instruction is a known, incomplete fix, not a clean win: with
+translation-at-ingestion (see above) normalizing most of the store to
+Hebrew, a Hebrew question reliably gets a Hebrew answer (4/4 in testing across
+multiple rewordings), but an English question now often gets answered in
+Hebrew anyway — a regression from before translation-at-ingestion existed,
+when most retrieved context was still in its original, more varied
+language. Confirmed this is a genuine model-following limit, not a wording
+problem: bracketing the instruction (top + immediately pre-generation),
+moving it into a system message, explicitly naming "detect the question's
+language" as the rule, and lowering `k` to reduce how much Hebrew text
+surrounds the instruction were all tried — none reliably fixed the English
+case without this exact combination re-breaking the Hebrew case tested
+first. The volume of same-language context in the prompt outweighs an
+explicit instruction about a different field's language.
+
+Accepted as-is because real usage is expected to be Hebrew-majority (see
+translation-at-ingestion above) — optimizing for the common case over the
+rare one. Rejected: chasing a fully general fix by detecting the question's
+language in code first (same `_is_hebrew()`-style heuristic already used at
+ingestion) and hard-coding it into the prompt as a fact rather than asking
+the model to infer it — untested; the likely next thing to try if the
+English-question case turns out to matter more than expected. → `query_rag.py`
+
 ## Streamlit, single app with sidebar Ingest + main-page Ask
 Chosen over a custom React/HTML frontend: zero frontend build step,
 `streamlit run app.py`, looks like a real chat app via `st.chat_message`, and
