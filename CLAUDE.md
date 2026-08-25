@@ -1,4 +1,4 @@
-# Customer Handoff RAG Tool — Agent Instructions
+# Customer Research RAG Tool — Agent Instructions
 
 ## Your Role
 You are pairing with a solo developer on a 2-day take-home assignment for the

@@ -24,6 +24,11 @@ def save_last_ingest(folder_path: str, customer_name: str) -> None:
     )
 
 
+def format_source_label(source: str) -> str:
+    path = Path(source)
+    return f"{path.name} ({path.parent.name})" if path.parent.name else path.name
+
+
 def list_customers() -> list[str]:
     with psycopg.connect(get_psycopg_connection()) as conn:
         with conn.cursor() as cur:
@@ -66,9 +71,24 @@ st.markdown(
         font-weight: 600;
         margin-bottom: 1rem;
     }
+    .source-chunk-text {
+        font-family: 'Segoe UI', 'Assistant', 'Arial', sans-serif;
+        font-size: 0.95rem;
+        line-height: 1.6;
+        white-space: pre-wrap;
+        direction: rtl;
+        text-align: right;
+    }
+    [data-testid="stPopover"] button {
+        justify-content: flex-end;
+        gap: 0.5rem;
+    }
+    [data-testid="stPopover"] button p {
+        text-align: right;
+    }
     </style>
     <div class="header-bar">
-        <h1>כלי RAG למסירת לקוחות</h1>
+        <h1>צ׳אט חקירת לקוחות</h1>
     </div>
     """,
     unsafe_allow_html=True,
@@ -144,8 +164,11 @@ else:
             if message.get("sources"):
                 with st.expander("מקורות"):
                     for source in message["sources"]:
-                        st.markdown(f"**{source['source']}**")
-                        st.text(source["content"])
+                        with st.popover(format_source_label(source["source"])):
+                            st.markdown(
+                                f'<div class="source-chunk-text">{html.escape(source["content"])}</div>',
+                                unsafe_allow_html=True,
+                            )
 
     if user_input := st.chat_input("שאלו שאלה על הלקוח"):
         history = [

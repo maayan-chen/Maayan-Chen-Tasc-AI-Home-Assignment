@@ -285,3 +285,19 @@ all-Hebrew one. Rejected: a single shared `lang` setting for both call sites
 testing degrades badly. Cost: two hardcoded language strings to keep straight
 instead of one — worth it since guessing wrong on either path produces
 unusable text, not just marginally worse text. → `vector_store.py`
+
+## Framing broadened from "handoff-only" to general customer research — no architectural change
+The product framing (mission statement, target personas, UI headline) moved
+from "help a new team pick up an existing customer at handoff" to "make
+everything a TASC team knows about a customer queryable," covering ongoing
+research on a live engagement, not just the one-time handoff moment.
+`context_tag` scoping, the ingestion pipeline, and retrieval are all
+untouched — this is a persona/positioning change, not a functional one.
+Handoff is still one instance of "research" under the broader framing (a
+new team researching a customer they just inherited), so nothing in the
+old handoff-specific design (e.g. the departing-consultant ingestion story)
+had to be walked back, only generalized. Rejected: keeping two separate
+framings (a "handoff mode" and a "research mode") — there is no behavioral
+difference between them, so a mode toggle would be a UI element with
+nothing real behind it, the same kind of unexplainable layer this project
+avoids elsewhere. → `PRD.md`, `CLAUDE.md`, `STATE.md`, `app.py`

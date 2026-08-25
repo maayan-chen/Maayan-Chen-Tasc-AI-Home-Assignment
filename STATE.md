@@ -1,39 +1,41 @@
 <!-- This file must stay under 80 lines. If it grows, prune or move content to docs/. -->
-# Customer Handoff RAG Tool — Current State
-Last updated: 2026-08-23 (Hebrew RAG quality + Hebrew/RTL UI work in
-progress on `improve-hebrew-retrieval-ocr`, not yet merged to `main`)
+# Customer Research RAG Tool — Current State
+Last updated: 2026-08-25 (pivoted framing from handoff-only to general
+customer research; sources UI polish; Hebrew RAG quality + Hebrew/RTL UI
+merged to `main` from `improve-hebrew-retrieval-ocr`)
 
 ## Project Summary
-A Streamlit app (Ingest tab + Ask tab) that helps a new TASC team get up to
-speed on an existing customer at project handoff. Ingestion is deterministic:
-reads a project folder, indexes everything into a shared pgvector store
-tagged with a customer's `context_tag`; the Ask tab is a chat UI scoped to
-one customer. Built from `References/Nivs-RAG/` (RAG base). No LLM/agent step
-in ingestion — a web-search agent was planned, then cut before
-implementation (see `docs/ARCHITECTURE.md`: it reduced to one fixed,
-non-judgmental tool call, not worth the complexity). 2-day budget, must stay
-simple enough to fully explain in an interview.
+A Streamlit app (Ingest tab + Ask tab) that helps a TASC team research and
+get up to speed on a customer — whether picking up an existing engagement
+or working one they're already on. Ingestion is deterministic: reads a
+project folder, indexes everything into a shared pgvector store tagged with
+a customer's `context_tag`; the Ask tab is a chat UI scoped to one customer.
+Built from `References/Nivs-RAG/` (RAG base). No LLM/agent step in
+ingestion — a web-search agent was planned, then cut before implementation
+(see `docs/ARCHITECTURE.md`: it reduced to one fixed, non-judgmental tool
+call, not worth the complexity). 2-day budget, must stay simple enough to
+fully explain in an interview.
 
 ## Current Task
 Real customer folders used for testing: `Teva_Org_Streamlining_Project` and
 `Teva_PGTech_Acquisition_Project` (mixed Hebrew/English `.docx`/`.xlsx`/
 `.pptx`/`.pdf`/`.png` files), both ingested under `context_tag='teva'`.
 Earlier phases (RAG base setup, ingestion CLI, Streamlit UI, xlsx
-tabular-retrieval fix, chat history) are shipped and merged to `main` — see
-`git log` and `docs/ARCHITECTURE.md` for what/why.
+tabular-retrieval fix, chat history, Hebrew RAG quality + RTL UI) are
+shipped and merged to `main` — see `git log` and `docs/ARCHITECTURE.md`
+for what/why.
 
-**In progress, branch `improve-hebrew-retrieval-ocr`, not yet merged:** a
-real bug report (broad Hebrew questions returning "I don't know") led to
-several fixes, all in `docs/ARCHITECTURE.md`: `query_rag.py`'s
-`ChatOpenAI()` was silently defaulting to `gpt-3.5-turbo` (now `gpt-4o`);
-`k` raised 3→8; non-Hebrew documents are now translated to Hebrew at
-ingestion to close a measured cross-lingual embedding gap; the prompt
-answers in the question's language and formats with Markdown
-bullets/paragraphs; the whole UI (`app.py`) is translated to Hebrew and
-RTL. **Known gap:** an English question now often gets answered in Hebrew
-anyway (regression from the translation-at-ingestion fix) — accepted since
-real usage is expected to be Hebrew-majority, see `docs/ARCHITECTURE.md`.
-**Goal:** merge this branch once reviewed; further RAG quality work TBD.
+**Merged to `main` (from `improve-hebrew-retrieval-ocr`):** a real bug
+report (broad Hebrew questions returning "I don't know") led to several
+fixes, all in `docs/ARCHITECTURE.md`: `query_rag.py`'s `ChatOpenAI()` was
+silently defaulting to `gpt-3.5-turbo` (now `gpt-4o`); `k` raised 3→8;
+non-Hebrew documents are now translated to Hebrew at ingestion to close a
+measured cross-lingual embedding gap; the prompt answers in the question's
+language and formats with Markdown bullets/paragraphs; the whole UI
+(`app.py`) is translated to Hebrew and RTL. **Known gap:** an English
+question now often gets answered in Hebrew anyway (regression from the
+translation-at-ingestion fix) — accepted since real usage is expected to
+be Hebrew-majority, see `docs/ARCHITECTURE.md`.
 
 ## System Status
 | Component | Status | Notes |
@@ -46,11 +48,12 @@ real usage is expected to be Hebrew-majority, see `docs/ARCHITECTURE.md`.
 | `app.py` (Streamlit, sidebar Ingest + main-page Ask) | ✅ Live | Shipped on `streamlit-ui` branch; delete-before-insert bug and chat error handling fixed since |
 | xlsx tabular retrieval (header-labeled extraction, row-based chunking, XML-tagged prompt) | ✅ Live | On `improve-rag-tabular-retrieval` branch; real `teva` xlsx data re-ingested — see `docs/ARCHITECTURE.md` |
 | Chat-history-aware retrieval (`answer_question(history=...)`) | ✅ Live | Merged to `main`; verified live against Ronit role/salary follow-up — see `docs/ARCHITECTURE.md` |
-| Hebrew RAG quality fixes (gpt-4o, k=8, translation-at-ingestion, language-matched Markdown answers) + Hebrew/RTL UI | 🔶 On branch | `improve-hebrew-retrieval-ocr`, not yet merged — see `docs/ARCHITECTURE.md` |
+| Hebrew RAG quality fixes (gpt-4o, k=8, translation-at-ingestion, language-matched Markdown answers) + Hebrew/RTL UI | ✅ Live | Merged to `main` from `improve-hebrew-retrieval-ocr` — see `docs/ARCHITECTURE.md` |
+| Sources UI (click-to-reveal per source, `FILE (parent folder)` labels, RTL chunk text) | ✅ Live | On `main`; see `.agents/execution-reports/sources-ui-polish.md` |
 | Git repo | ✅ Live | `main`, author `maayan-chen <maayan18058@gmail.com>` |
 
 ## Next Up
-1. Review and merge `improve-hebrew-retrieval-ocr` to `main`.
+1. Further RAG quality work TBD (see Known Issues below).
 
 ## Known Issues
 | Issue | Severity | Notes |

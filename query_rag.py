@@ -4,10 +4,6 @@ from langchain.prompts import ChatPromptTemplate
 from vector_store import create_vector_store
 
 PROMPT_TEMPLATE = """
-IMPORTANT: Regardless of what language the documents below are written in,
-you must write your entire answer in the same language as the Question at
-the bottom of this prompt.
-
 Answer the question using only the documents below. Each document may
 contain table rows formatted as "Header: value | Header: value" — treat
 each Header: value pair as a distinct field, not continuous prose.

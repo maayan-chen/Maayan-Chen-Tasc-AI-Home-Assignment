@@ -93,3 +93,31 @@ cmetadata->>'source' = ...`) before re-running ingestion, for every file
 whose *processing logic* changed even though its *bytes* didn't. Don't chase
 this by looking for a bug in the new extraction/chunking code — it's correct;
 the bug is that old rows were never told they're stale. → `ingest.py`
+
+## Streamlit's page-level `direction: rtl` does not reach `st.popover`/`st.expander` content, and expanders cannot nest
+
+Two separate traps hit in the same change (adding a click-to-reveal source
+list in `app.py`), both invisible to static checks (`ast.parse` and any
+linter) and only surfacing once the UI was actually clicked in the browser:
+
+1. `st.expander` cannot contain another `st.expander` —
+   `StreamlitAPIException: Expanders may not be nested inside other
+   expanders`, raised at render time, not import time. Use `st.popover` for
+   the inner, click-to-reveal control instead; it nests inside an expander
+   fine.
+2. The app's global RTL rule targets `[data-testid="stAppViewContainer"]`
+   only. `st.popover` (and likely `st.expander`, untested) renders its body
+   content in a container Streamlit portals outside that subtree, so Hebrew
+   text placed inside a popover stays left-aligned even on a fully-RTL page
+   — inheritance doesn't reach it. The popover's own *trigger button* text
+   picked up correct RTL styling from a separate, correctly-scoped
+   `[data-testid="stPopover"] button` rule, which made it look at a glance
+   like RTL was "already working" everywhere; only the content *inside* an
+   opened popover was actually still LTR. Don't assume one working RTL
+   element proves the page-level rule is reaching everything — any content
+   rendered inside a popover/expander body needs its own explicit
+   `direction: rtl; text-align: right;`, not inherited ones. This project's
+   Hebrew/RTL UI is a deliberate, named feature (see `docs/ARCHITECTURE.md`
+   Hebrew RAG quality section), so the next RTL-styled widget added to
+   `app.py` will hit the same gap if this isn't checked live in the
+   browser. → `app.py`

@@ -1,19 +1,20 @@
-# Customer Handoff RAG Tool — Product Requirements Document
+# Customer Research RAG Tool — Product Requirements Document
 
 ## 1. Executive Summary
 
-The Customer Handoff RAG Tool is an internal Streamlit application that helps
-TASC consultants get a new team up to speed when they inherit an existing
-customer engagement. Today, project handoff knowledge lives scattered across
-project files, meeting notes, and public information about the customer —
-new team members have to manually dig through folders and ask around to
-reconstruct context.
+The Customer Research RAG Tool is an internal Streamlit application that
+helps TASC consultants research and get up to speed on a customer engagement
+using everything already known about that customer. Today, that knowledge
+lives scattered across project files, meeting notes, and public information
+about the customer — a consultant has to manually dig through folders and
+ask around to reconstruct context, whether they're picking up an existing
+engagement or digging into one they're already on.
 
 This tool collects everything known about a customer — local project files,
 meeting summaries, and a web search for public company info — into a shared
-retrieval-augmented generation (RAG) store, tagged by customer. A new team
-member then opens the same app and asks natural-language questions scoped to
-just that customer, getting grounded answers with source citations.
+retrieval-augmented generation (RAG) store, tagged by customer. A consultant
+then opens the same app and asks natural-language questions scoped to just
+that customer, getting grounded answers with source citations.
 
 The MVP goal is a working two-tab Streamlit app (Ingest, Ask) built on a
 reused FastAPI/LangChain/Postgres-pgvector RAG base, completed within a
@@ -23,9 +24,9 @@ usable internal utility, not a demo piece.
 
 ## 2. Mission
 
-**Mission statement:** Make the knowledge a departing team already has about
-a customer instantly queryable by the team that replaces them, without
-requiring anyone to manually re-read or re-organize project files.
+**Mission statement:** Make everything a TASC team already knows about a
+customer instantly queryable, without requiring anyone to manually re-read
+or re-organize project files.
 
 **Core principles:**
 1. **Simplicity and explainability over impressiveness.** Every line must be
@@ -44,20 +45,23 @@ requiring anyone to manually re-read or re-organize project files.
 
 ## 3. Target Users
 
-**Primary persona: TASC consultant (non-technical), post-handoff.**
-- Picks up an existing customer engagement from a departing team.
+**Primary persona: TASC consultant (non-technical), researching a customer.**
+- Working an existing customer engagement — whether picked up from a
+  departing team or one they're already on — and needs fast, grounded
+  answers about that customer.
 - Comfortable with a simple web form and a chat interface; not expected to
   read code, run CLI commands, or understand vector databases.
 - Needs: "What do I need to know about this customer before my first call?"
   and ongoing quick lookups ("What did we agree on for the Q2 rollout?").
 - Pain point today: context is scattered across files and people's memory;
-  onboarding to a handed-off account is slow and error-prone.
+  reconstructing context on an account is slow and error-prone.
 
-**Secondary persona: Departing consultant, running ingestion.**
+**Secondary persona: Consultant running ingestion.**
 - Has a project folder full of files (specs, notes, meeting summaries) for
-  the customer they're handing off.
-- Needs: a fast, low-friction way to package that knowledge for the next
-  team, without manually curating or reformatting it.
+  a customer — whether onboarding a new engagement, handing one off, or
+  just keeping an existing one's knowledge base current.
+- Needs: a fast, low-friction way to package that knowledge for querying,
+  without manually curating or reformatting it.
 - Comfortable typing a folder path and a customer name into a form.
 
 **Technical comfort level:** Low to moderate for both personas — this is
