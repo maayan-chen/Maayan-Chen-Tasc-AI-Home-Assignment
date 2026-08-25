@@ -39,7 +39,7 @@ def list_customers() -> list[str]:
             return [row[0] for row in cur.fetchall()]
 
 
-st.set_page_config(page_title="כלי RAG למסירת לקוחות", layout="wide")
+st.set_page_config(page_title="צ׳אט חקירת לקוחות", layout="wide")
 
 st.markdown(
     """

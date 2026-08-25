@@ -94,6 +94,24 @@ whose *processing logic* changed even though its *bytes* didn't. Don't chase
 this by looking for a bug in the new extraction/chunking code — it's correct;
 the bug is that old rows were never told they're stale. → `ingest.py`
 
+## `slugify()`'s regex silently rejected Hebrew customer names entirely
+`ingest.py`'s `slugify()` used `[^a-z0-9]+` to build `context_tag` from the
+typed customer name — ASCII-only, despite this app being Hebrew/RTL-first
+(see Hebrew RAG quality work above) and `CLAUDE.md` requiring customer
+identity to always be explicit, human-typed input. A Hebrew-only name (e.g.
+`משרד המשפטים`) has zero characters matching `[a-z0-9]`, so every character
+gets stripped and the result is an empty string — `run_ingestion()` then
+raised `"customer_name is required"` on a non-empty field, which reads like
+a validation bug on the input itself rather than a charset bug in the
+slug function. Confirmed live: typing a Hebrew customer name in the sidebar
+form always failed ingestion, for any Hebrew name, not an edge case. Fixed
+by switching to `[^\w]+` with `re.UNICODE` (Python 3 default), which treats
+Hebrew and other Unicode letters as valid slug characters, not just ASCII.
+Don't chase a Hebrew-input bug like this by looking at the Streamlit form or
+`run_ingestion()`'s validation — the field value was never empty; the bug
+was silent character-class stripping one function away from where the error
+surfaced. → `ingest.py`
+
 ## Streamlit's page-level `direction: rtl` does not reach `st.popover`/`st.expander` content, and expanders cannot nest
 
 Two separate traps hit in the same change (adding a click-to-reveal source

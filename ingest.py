@@ -9,7 +9,10 @@ from vector_store import get_psycopg_connection, translate_to_hebrew_if_needed
 
 
 def slugify(name: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
+    # \w with re.UNICODE (default in Python 3) matches Hebrew and other
+    # Unicode letters, not just ASCII a-z0-9 — a Hebrew-only customer name
+    # (e.g. "משרד המשפטים") must still produce a non-empty context_tag.
+    return re.sub(r"[^\w]+", "-", name.strip().lower(), flags=re.UNICODE).strip("-")
 
 
 def _get_indexed_file_hashes(context_tag: str) -> dict[str, str]:
