@@ -21,4 +21,6 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # package, and only surfaces at parse time, not at import time.
 RUN python -m nltk.downloader punkt_tab averaged_perceptron_tagger_eng -d /usr/local/nltk_data
 
-CMD ["sh", "-c", "python -c 'from vector_store import create_vector_store; create_vector_store()' && tail -f /dev/null"]
+EXPOSE 8501
+
+CMD ["sh", "-c", "python -c 'from vector_store import create_vector_store; create_vector_store()' && streamlit run app.py --server.address=0.0.0.0"]
