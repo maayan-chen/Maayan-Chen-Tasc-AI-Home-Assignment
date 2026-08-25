@@ -1,8 +1,8 @@
 <!-- This file must stay under 80 lines. If it grows, prune or move content to docs/. -->
 # Customer Research RAG Tool — Current State
-Last updated: 2026-08-25 (pivoted framing from handoff-only to general
-customer research; sources UI polish; Hebrew RAG quality + Hebrew/RTL UI
-merged to `main` from `improve-hebrew-retrieval-ocr`)
+Last updated: 2026-08-25 (submission roadmap page + mock customer data
+merged to `main` from `plan/submission-roadmap-page`; Hebrew customer-name
+slugify fix; `data/alice_in_wonderland.md` sample removed)
 
 ## Project Summary
 A Streamlit app (Ingest tab + Ask tab) that helps a TASC team research and
@@ -17,9 +17,14 @@ call, not worth the complexity). 2-day budget, must stay simple enough to
 fully explain in an interview.
 
 ## Current Task
-Real customer folders used for testing: `Teva_Org_Streamlining_Project` and
-`Teva_PGTech_Acquisition_Project` (mixed Hebrew/English `.docx`/`.xlsx`/
-`.pptx`/`.pdf`/`.png` files), both ingested under `context_tag='teva'`.
+`Submission/roadmap.html` — a self-contained, static HTML page for
+assignment reviewers explaining the ingestion/ask pipelines, key
+architecture decisions, and a customer-isolation proof — shipped and
+merged to `main` from `plan/submission-roadmap-page`. Built from real mock
+customer folders now checked into `Submission/Mock projects/`
+(`Teva_Org_Streamlining_Project`, `Teva_PGTech_Acquisition_Project`,
+`Ministry_of_Justice_Digital_Transformation_Project`), replacing the
+earlier `data/alice_in_wonderland.md` sanity-check file (removed, unused).
 Earlier phases (RAG base setup, ingestion CLI, Streamlit UI, xlsx
 tabular-retrieval fix, chat history, Hebrew RAG quality + RTL UI) are
 shipped and merged to `main` — see `git log` and `docs/ARCHITECTURE.md`
@@ -50,6 +55,7 @@ be Hebrew-majority, see `docs/ARCHITECTURE.md`.
 | Chat-history-aware retrieval (`answer_question(history=...)`) | ✅ Live | Merged to `main`; verified live against Ronit role/salary follow-up — see `docs/ARCHITECTURE.md` |
 | Hebrew RAG quality fixes (gpt-4o, k=8, translation-at-ingestion, language-matched Markdown answers) + Hebrew/RTL UI | ✅ Live | Merged to `main` from `improve-hebrew-retrieval-ocr` — see `docs/ARCHITECTURE.md` |
 | Sources UI (click-to-reveal per source, `FILE (parent folder)` labels, RTL chunk text) | ✅ Live | On `main`; see `.agents/execution-reports/sources-ui-polish.md` |
+| `Submission/roadmap.html` (reviewer-facing visual explainer) | ✅ Live | Merged to `main` from `plan/submission-roadmap-page`; self-contained, embeds real screenshots + isolation-proof example |
 | Git repo | ✅ Live | `main`, author `maayan-chen <maayan18058@gmail.com>` |
 
 ## Next Up
