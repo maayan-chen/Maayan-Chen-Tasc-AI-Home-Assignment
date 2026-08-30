@@ -31,7 +31,6 @@ See `.claude/commands/init-project.md` for full local setup.
 |---|---|
 | `streamlit run app.py` | Start the app (Ingest + Ask tabs) |
 | `python ingest.py --customer "<name>" --folder /path` | Run ingestion from the CLI, without the UI |
-| `python query_data.py "<question>"` | Query via CLI (reference script from Nivs-RAG) |
 | `docker compose up --build` | Start Postgres+pgvector and the app |
 
 ## Documentation
