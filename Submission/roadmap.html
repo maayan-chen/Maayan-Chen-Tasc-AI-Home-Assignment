@@ -537,10 +537,10 @@
     <p class="tree-label">What runs</p>
     <div class="tree">
 <span class="dir">app.py</span>                       <span class="note"># Streamlit entrypoint — sidebar Ingest form + main-page Ask chat</span>
-<span class="dir">ingest.py</span>                     <span class="note"># run_ingestion() — orchestrates a full ingestion run, + CLI wrapper</span>
-<span class="dir">read_local_files.py</span>            <span class="note"># walks a folder, hashes + reads each file</span>
+<span class="dir">ingest.py</span>                     <span class="note"># run_ingestion() — read → translate → chunk → tag → save</span>
+<span class="dir">read_local_files.py</span>            <span class="note"># walks a folder, hashes each file, per-file-type extraction + OCR</span>
 <span class="dir">query_rag.py</span>                   <span class="note"># answer_question() — retrieval, prompt assembly, gpt-4o call</span>
-<span class="dir">vector_store.py</span>                <span class="note"># per-file-type extraction, OCR, translation, pgvector connection</span>
+<span class="dir">vector_store.py</span>                <span class="note"># pgvector connection + PGVector store setup</span>
 <span class="dir">create_database.py</span>             <span class="note"># split_text(), save_to_pgvector(), set_context_tag()</span>
 <span class="dir">docker-compose.yml</span>, <span class="dir">Dockerfile</span>, <span class="dir">init.sql</span>  <span class="note"># Postgres+pgvector</span>
 requirements.txt                    <span class="note"># Python deps — LangChain, OpenAI, Streamlit, parsers, OCR</span>
@@ -693,7 +693,7 @@ PRD.md                                 <span class="note">→ full requirements 
         <p>The hash/skip check runs before translation, and the xlsx-vs-everything-else chunking split happens after translation — both intentional, not simplified for the diagram. A changed file's old chunks are deleted only after its replacement chunks are saved successfully, so a failed save (e.g. an OpenAI rate limit) never loses a file's content.</p>
         <div class="filelist">
           <code>ingest.py</code>
-          <code>vector_store.py</code>
+          <code>read_local_files.py</code>
           <code>create_database.py</code>
         </div>
       </div>

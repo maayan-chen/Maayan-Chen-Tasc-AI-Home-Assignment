@@ -112,7 +112,7 @@ translation quality (mistranslation is a new, no longer git-diffable failure
 mode — the DB no longer holds the source document's literal words), and
 content that reads as authored in Hebrew from the start
 even where it was originally English, which the UI does not currently
-disclose. → `ingest.py`, `vector_store.py`
+disclose. → `ingest.py`
 
 ## Chat answers are formatted with Markdown and instructed to match the question's language — reliable for Hebrew, not for English
 `PROMPT_TEMPLATE` (`query_rag.py`) asks the model to break answers into
@@ -209,7 +209,7 @@ other low-signal chunk, the same way a low-quality OCR'd PDF page is handled.
 A misclassified image (real slide marked "not text" and skipped) would be a
 worse, silent failure than always-OCR's worst case. Cost: OCR runs on some
 images that turn out to have no useful text — cheap and local, not worth
-avoiding. → `vector_store.py`
+avoiding. → `read_local_files.py`
 
 ## Spreadsheet rows are chunked row-aligned, not by the shared character splitter
 `.xlsx`-sourced documents bypass `create_database.py`'s `split_text()`
@@ -227,7 +227,7 @@ header context — overlap only helps when the header lands within one
 chunk_size window of the row using it, which breaks on any sheet with more
 than a handful of rows. Cost: two chunking code paths to keep in sync instead
 of one — worth it since the bug this fixes was silently wrong answers, not a
-crash. → `ingest.py`, `vector_store.py`
+crash. → `ingest.py`, `read_local_files.py`
 
 ## xlsx header row is detected by heuristic, not assumed to be row 1
 `_extract_xlsx()` treats the first row with more than one non-empty cell as
@@ -246,7 +246,7 @@ fixed skip would misfire in the opposite direction. Cost: a sheet whose real
 header row happens to have only one non-empty cell (single-column table) is
 misdetected — not observed in real data, and a single-column table has no
 column-mixup failure mode to begin with, so this is an acceptable gap.
-→ `vector_store.py`
+→ `read_local_files.py`
 
 ## Chat history is folded into retrieval by concatenation, not an LLM query-rewrite step
 `answer_question()` accepts the last `HISTORY_TURNS` (2) exchanges and prepends
@@ -284,7 +284,7 @@ all-Hebrew one. Rejected: a single shared `lang` setting for both call sites
 — whichever choice is picked, one of the two real cases already observed in
 testing degrades badly. Cost: two hardcoded language strings to keep straight
 instead of one — worth it since guessing wrong on either path produces
-unusable text, not just marginally worse text. → `vector_store.py`
+unusable text, not just marginally worse text. → `read_local_files.py`
 
 ## Framing broadened from "handoff-only" to general customer research — no architectural change
 The product framing (mission statement, target personas, UI headline) moved
