@@ -3,9 +3,10 @@ import re
 
 import psycopg
 from langchain.schema import Document
+from langchain_openai import ChatOpenAI
 from create_database import save_to_pgvector, set_context_tag, split_text
 from read_local_files import read_local_files
-from vector_store import get_psycopg_connection, translate_to_hebrew_if_needed
+from vector_store import get_psycopg_connection
 
 
 def slugify(name: str) -> str:
@@ -13,6 +14,33 @@ def slugify(name: str) -> str:
     # Unicode letters, not just ASCII a-z0-9 — a Hebrew-only customer name
     # (e.g. "משרד המשפטים") must still produce a non-empty context_tag.
     return re.sub(r"[^\w]+", "-", name.strip().lower(), flags=re.UNICODE).strip("-")
+
+
+def _is_hebrew(text: str) -> bool:
+    """Heuristic majority-language check, same style as
+    read_local_files.py's _is_text_unreliable — no LLM call needed just to
+    decide whether translation is needed (see docs/ARCHITECTURE.md:
+    translation-at-ingestion)."""
+    hebrew_chars = sum(1 for c in text if "א" <= c <= "ת")
+    alpha_chars = sum(1 for c in text if c.isalpha())
+    return alpha_chars > 0 and (hebrew_chars / alpha_chars) > 0.5
+
+
+def translate_to_hebrew_if_needed(content: str) -> str:
+    """Normalize non-Hebrew document text to Hebrew before chunking/embedding,
+    so retrieval isn't split across two embedding neighborhoods by source
+    language (see docs/ARCHITECTURE.md: translation-at-ingestion). A no-op
+    for documents already majority-Hebrew — most real customer files are, so
+    this only spends an LLM call on the minority that need it."""
+    if _is_hebrew(content):
+        return content
+    model = ChatOpenAI(model="gpt-4o")
+    response = model.invoke(
+        "Translate the following document to Hebrew. Preserve structure, "
+        "numbers, names, and formatting as closely as possible. Output only "
+        f"the translated text, nothing else.\n\n{content}"
+    )
+    return response.content
 
 
 def _get_indexed_file_hashes(context_tag: str) -> dict[str, str]:

@@ -537,10 +537,10 @@
     <p class="tree-label">What runs</p>
     <div class="tree">
 <span class="dir">app.py</span>                       <span class="note"># Streamlit entrypoint — sidebar Ingest form + main-page Ask chat</span>
-<span class="dir">ingest.py</span>                     <span class="note"># run_ingestion() — orchestrates a full ingestion run, + CLI wrapper</span>
-<span class="dir">read_local_files.py</span>            <span class="note"># walks a folder, hashes + reads each file</span>
+<span class="dir">ingest.py</span>                     <span class="note"># run_ingestion() — read → translate → chunk → tag → save</span>
+<span class="dir">read_local_files.py</span>            <span class="note"># walks a folder, hashes each file, per-file-type extraction + OCR</span>
 <span class="dir">query_rag.py</span>                   <span class="note"># answer_question() — retrieval, prompt assembly, gpt-4o call</span>
-<span class="dir">vector_store.py</span>                <span class="note"># per-file-type extraction, OCR, translation, pgvector connection</span>
+<span class="dir">vector_store.py</span>                <span class="note"># pgvector connection + PGVector store setup</span>
 <span class="dir">create_database.py</span>             <span class="note"># split_text(), save_to_pgvector(), set_context_tag()</span>
 <span class="dir">docker-compose.yml</span>, <span class="dir">Dockerfile</span>, <span class="dir">init.sql</span>  <span class="note"># Postgres+pgvector</span>
 requirements.txt                    <span class="note"># Python deps — LangChain, OpenAI, Streamlit, parsers, OCR</span>
@@ -568,7 +568,7 @@ PRD.md                                 <span class="note">→ full requirements 
     <details class="tech" style="margin-top:18px;">
       <summary>For developers — the split in one sentence</summary>
       <div class="tech-body">
-        <p>Only six files run the app: <code>app.py</code>, <code>ingest.py</code>, <code>read_local_files.py</code>, <code>query_rag.py</code>, and the two reused base files <code>vector_store.py</code> / <code>create_database.py</code>. Everything under <code>docs/</code>, <code>STATE.md</code>, <code>PRD.md</code>, and <code>.agents/</code> is planning and rationale — none of it is imported by the running app, but it's where every "why" in this page traces back to. <code>Mock projects/</code> isn't imported by the app either — it's the input the Ingest form was pointed at to produce the screenshots on this page, not something the app reads automatically.</p>
+        <p>Only six files run the app: <code>app.py</code>, <code>ingest.py</code>, <code>read_local_files.py</code>, <code>query_rag.py</code>, <code>vector_store.py</code> / <code>create_database.py</code>. Everything under <code>docs/</code>, <code>STATE.md</code>, <code>PRD.md</code>, and <code>.agents/</code> is planning and rationale — none of it is imported by the running app, but it's where every "why" in this page traces back to. <code>Mock projects/</code> isn't imported by the app either — it's the input the Ingest form was pointed at to produce the screenshots on this page, not something the app reads automatically.</p>
       </div>
     </details>
   </section>
@@ -669,21 +669,21 @@ PRD.md                                 <span class="note">→ full requirements 
         <!-- Row 2 (y 320-390): chunk -> tag -> pgvector, directly below translate, clear gap from row 1 -->
         <line x1="734" y1="177" x2="734" y2="316" stroke="currentColor" stroke-width="1.5" marker-end="url(#arrow)"/>
 
-        <rect x="646" y="320" width="176" height="58" rx="10" fill="none" stroke="currentColor" stroke-width="1.7"/>
-        <text x="734" y="349" text-anchor="middle" font-size="11.5" font-weight="700" fill="currentColor">Postgres / pgvector</text>
-        <text x="734" y="365" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.75">one shared table, all customers</text>
+        <rect x="646" y="320" width="222" height="58" rx="10" fill="none" stroke="currentColor" stroke-width="1.7"/>
+        <text x="754" y="343" text-anchor="middle" font-size="11.5" font-weight="700" fill="currentColor">Chunk</text>
+        <text x="754" y="359" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.75">xlsx: one row per chunk · else: shared splitter</text>
 
         <line x1="646" y1="349" x2="584" y2="349" stroke="currentColor" stroke-width="1.5" marker-end="url(#arrow)"/>
 
-        <rect x="404" y="320" width="180" height="58" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <rect x="404" y="320" width="180" height="58" rx="10" fill="none" stroke="currentColor" stroke-width="1.7"/>
         <text x="494" y="343" text-anchor="middle" font-size="11.5" font-weight="700" fill="currentColor">Stamp context_tag</text>
         <text x="494" y="359" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.75">the customer, typed by a human</text>
 
         <line x1="404" y1="349" x2="342" y2="349" stroke="currentColor" stroke-width="1.5" marker-end="url(#arrow)"/>
 
-        <rect x="140" y="320" width="202" height="58" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
-        <text x="241" y="343" text-anchor="middle" font-size="11.5" font-weight="700" fill="currentColor">Chunk</text>
-        <text x="241" y="359" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.75">xlsx: one row per chunk · else: shared splitter</text>
+        <rect x="140" y="320" width="202" height="58" rx="10" fill="none" stroke="currentColor" stroke-width="1.7"/>
+        <text x="241" y="343" text-anchor="middle" font-size="11.5" font-weight="700" fill="currentColor">Postgres / pgvector</text>
+        <text x="241" y="359" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.75">one shared table, all customers</text>
       </svg>
     </figure>
 
@@ -693,7 +693,7 @@ PRD.md                                 <span class="note">→ full requirements 
         <p>The hash/skip check runs before translation, and the xlsx-vs-everything-else chunking split happens after translation — both intentional, not simplified for the diagram. A changed file's old chunks are deleted only after its replacement chunks are saved successfully, so a failed save (e.g. an OpenAI rate limit) never loses a file's content.</p>
         <div class="filelist">
           <code>ingest.py</code>
-          <code>vector_store.py</code>
+          <code>read_local_files.py</code>
           <code>create_database.py</code>
         </div>
       </div>
